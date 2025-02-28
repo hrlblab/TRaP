@@ -6,25 +6,34 @@ from datetime import datetime
 
 from utils.io import rdata, wdata
 import numpy as np
-import pandas as pd  # 确保导入 pandas
+import pandas as pd  # Ensure pandas is imported
 from PyQt5.QtCore import QDir, Qt
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton,
                              QLineEdit, QCheckBox, QVBoxLayout, QFileDialog, QMessageBox,
-                             QHBoxLayout, QComboBox)
+                             QHBoxLayout, QComboBox, QListWidget)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from utils.SpectralPreprocess import (Binning, Denoise, Truncate, CosmicRayRemoval,
                                       SpectralResponseCorrection, subtractBaseline,
                                       FluorescenceBackgroundSubtraction)
+from scipy.signal import medfilt
 
 
+# --- Additional denoising functions ---
+def moving_average(data, window=5):
+    # Convolve with a uniform window
+    return np.convolve(data, np.ones(window)/window, mode='same')
+
+
+def median_filter(data, kernel_size=5):
+    return medfilt(data, kernel_size=kernel_size)
 
 
 class PlotCanvas(FigureCanvas):
     def __init__(self, parent=None, width=5, height=4, dpi=100):
-        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.fig = Figure(figsize=(width, height), dpi=dpi)  # Save Figure object as self.fig
         self.axes = self.fig.add_subplot(111)
         super().__init__(self.fig)
         self.setParent(parent)
@@ -32,7 +41,7 @@ class PlotCanvas(FigureCanvas):
 
     def plot(self, data):
         self.axes.clear()
-        # 如果传入的是 (x, y) 数据则绘制 x-y 曲线，否则绘制 y 曲线
+        # If data is a tuple (x, y) then plot x-y curve; otherwise, plot y only.
         if isinstance(data, tuple) and len(data) == 2:
             x, y = data
             self.axes.plot(x, y)
@@ -42,11 +51,11 @@ class PlotCanvas(FigureCanvas):
         self.draw()
 
     def draw_lines(self, positions, colors):
-        # 清除之前绘制的直线
+        # Clear existing lines
         for line in self.plotted_lines:
             line.remove()
         self.plotted_lines.clear()
-        # 绘制新的直线，并保存引用
+        # Draw new lines and store their references
         for pos, color in zip(positions, colors):
             line = self.axes.axhline(y=pos, color=color, linewidth=1)
             self.plotted_lines.append(line)
@@ -59,19 +68,24 @@ class P_Mean_Process_UI(QMainWindow):
         self.setWindowTitle("Spectrum Data Process")
         self.setGeometry(100, 100, 900, 600)
 
-        # 初始数据：模拟波长与光谱数据
-        self.wvnFull = np.linspace(400, 900, 500)  # 波长从400到900
+        # Initial simulated data: wavenumber and spectrum
+        self.wvnFull = np.linspace(400, 900, 500)
         self.rawSpect = np.sin(self.wvnFull / 100) + np.random.normal(0, 0.1, self.wvnFull.shape)
         self.current_spect = self.rawSpect.copy()
         self.current_wvn = self.wvnFull.copy()
 
-        # 为光谱响应校正准备一个 dummy 数组（二维，shape=(500,1)）
+        # Dummy WL Correction array (shape=(500,1))
         self.wlCorr = np.ones((500, 1)) * 1.2
 
-        # 用于记录处理步骤的列表（后续保存时将包含在文件名中）
+        # Record operations (for file naming)
         self.operations = []
 
+        # History: store processing states as dictionaries
+        self.history = []
         self.initUI()
+        self.add_history("Initial")
+
+
 
     def initUI(self):
         central_widget = QWidget()
@@ -80,12 +94,12 @@ class P_Mean_Process_UI(QMainWindow):
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
-        # PlotCanvas 实例
+        # PlotCanvas instance
         self.canvas = PlotCanvas(self, width=7, height=5, dpi=100)
         layout.addWidget(self.canvas)
-        self.update_plot()  # 初始绘制
+        self.update_plot()
 
-        # 参数输入区域（Start, Stop, Polyorder）
+        # Parameter input area (Start, Stop, Polyorder)
         param_layout = QHBoxLayout()
         self.label_start = QLabel("Start:")
         param_layout.addWidget(self.label_start)
@@ -101,11 +115,31 @@ class P_Mean_Process_UI(QMainWindow):
         param_layout.addWidget(self.edit_polyorder)
         layout.addLayout(param_layout)
 
-        # 显示当前保存文件名的 Label
+        # Denoise method selection
+        denoise_layout = QHBoxLayout()
+        self.label_denoise = QLabel("Denoise Method:")
+        denoise_layout.addWidget(self.label_denoise)
+        self.combo_denoise = QComboBox()
+        self.combo_denoise.addItems(["Savitzky-Golay", "Moving Average", "Median Filter"])
+        denoise_layout.addWidget(self.combo_denoise)
+        layout.addLayout(denoise_layout)
+
+        # Label to show current saved file name
         self.label_saved_file = QLabel("Current File Saved: None")
         layout.addWidget(self.label_saved_file)
 
-        # 按钮区域
+        # History list for process visualization
+        history_layout = QVBoxLayout()
+        history_label = QLabel("Processing History:")
+        history_layout.addWidget(history_label)
+        self.history_list = QListWidget()
+        history_layout.addWidget(self.history_list)
+        btn_revert = QPushButton("Revert to Selected Step")
+        btn_revert.clicked.connect(self.on_revert_history)
+        history_layout.addWidget(btn_revert)
+        layout.addLayout(history_layout)
+
+        # Button area
         btn_layout = QHBoxLayout()
         layout.addLayout(btn_layout)
 
@@ -150,45 +184,67 @@ class P_Mean_Process_UI(QMainWindow):
         btn_layout.addWidget(btn_load_rdata)
 
     def update_plot(self):
-        """更新图像显示。若有波长数据，则绘制 x-y 曲线；否则绘制 y 曲线"""
         if self.current_wvn is not None and len(self.current_wvn) == len(self.current_spect):
             self.canvas.plot((self.current_wvn, self.current_spect))
         else:
             self.canvas.plot(self.current_spect)
-        # print('spect: ' + f'{self.current_spect.shape}')
-        # print('wvn: ' + f'{self.current_wvn.shape}')
 
+    def add_history(self, op_name):
+        state = {
+            "op": op_name,
+            "wvn": np.copy(self.current_wvn),
+            "spect": np.copy(self.current_spect),
+            "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S")
+        }
+        self.history.append(state)
+        self.history_list.addItem(f"{op_name} ({state['timestamp']})")
 
-    # ----------- 各处理按钮的槽函数 -----------
+    def on_revert_history(self):
+        selected_items = self.history_list.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "Error", "Please select a history step to revert to.")
+            return
+        idx = self.history_list.row(selected_items[0])
+        state = self.history[idx]
+        self.current_wvn = np.copy(state["wvn"])
+        self.current_spect = np.copy(state["spect"])
+        self.operations.append(f"RevertTo({state['op']})")
+        self.update_plot()
+
+    # Processing functions
     def on_subtract_baseline(self):
         self.current_spect = subtractBaseline(self.current_spect)
         self.operations.append("SubtractBaseline")
         self.update_plot()
+        self.add_history("SubtractBaseline")
 
     def on_spectral_response_correction(self):
         self.current_spect = SpectralResponseCorrection(self.wlCorr, self.current_spect)
         self.operations.append("SpectralResponseCorrection")
         self.update_plot()
+        self.add_history("SpectralResponseCorrection")
 
     def on_cosmic_ray_removal(self):
         self.current_spect = CosmicRayRemoval(self.current_spect)
         self.operations.append("CosmicRayRemoval")
         self.update_plot()
+        self.add_history("CosmicRayRemoval")
 
     def on_truncate(self):
         try:
             start = float(self.edit_start.text())
             stop = float(self.edit_stop.text())
         except ValueError:
-            QMessageBox.warning(self, "Error", "Start and Stop Must be Number!")
+            QMessageBox.warning(self, "Error", "Start and Stop must be numbers!")
             return
         self.current_wvn, self.current_spect = Truncate(start, stop, self.wvnFull, self.current_spect)
         self.operations.append(f"Truncate({start}-{stop})")
         self.update_plot()
+        self.add_history(f"Truncate({start}-{stop})")
 
     def on_binning(self):
         if self.current_wvn.size == 0:
-            QMessageBox.warning(self, "Warning", "NoneType Input!")
+            QMessageBox.warning(self, "Warning", "Current data is empty!")
             return
         start = self.current_wvn[0]
         stop = self.current_wvn[-1]
@@ -197,25 +253,33 @@ class P_Mean_Process_UI(QMainWindow):
         self.current_wvn = new_wvn
         self.operations.append("Binning")
         self.update_plot()
+        self.add_history("Binning")
 
     def on_denoise(self):
-        self.current_spect = Denoise(self.current_spect, SGorder=2, SGframe=7)
-        self.operations.append("Denoise")
+        method = self.combo_denoise.currentText()
+        if method == "Savitzky-Golay":
+            self.current_spect = Denoise(self.current_spect, SGorder=2, SGframe=7)
+        elif method == "Moving Average":
+            self.current_spect = moving_average(self.current_spect, window=5)
+        elif method == "Median Filter":
+            self.current_spect = median_filter(self.current_spect, kernel_size=5)
+        self.operations.append(f"Denoise({method})")
         self.update_plot()
+        self.add_history(f"Denoise({method})")
 
     def on_FluorescenceBackgroundSubtraction(self):
         try:
             polyorder = int(self.edit_polyorder.text())
         except ValueError:
-            QMessageBox.warning(self, "Error", "Polyorder Must be Integer!")
+            QMessageBox.warning(self, "Error", "Polyorder must be an integer!")
             return
         base, finalSpect = FluorescenceBackgroundSubtraction(self.current_spect, polyorder)
         self.current_spect = finalSpect
         self.operations.append(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
         self.update_plot()
+        self.add_history(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
 
     def on_save_figure(self):
-        # 调用 wdata 模块保存图像，文件名中记录当前所有操作步骤
         try:
             filepath = wdata.save_figure(self.canvas.fig, self.operations, base_dir=".", file_ext="png")
             self.label_saved_file.setText("Saved Figure: " + filepath)
@@ -225,71 +289,60 @@ class P_Mean_Process_UI(QMainWindow):
 
     def on_save_data(self):
         if self.current_wvn is None or self.current_spect is None:
-            QMessageBox.warning(self, "Error", "Empty Data, Saving Error!")
+            QMessageBox.warning(self, "Error", "Empty data, cannot save!")
             return
         try:
-            # 对于分开保存，可以分别调用 wdata.save_data 保存不同数据
-            wvn_filepath = wdata.save_data(self.current_wvn.reshape(-1, 1), 'Wvn', self.operations,
-                                           base_dir=".", file_ext="csv", header=None)
-            spect_filepath = wdata.save_data(self.current_spect.reshape(-1, 1), 'Spect', self.operations,
-                                             base_dir=".", file_ext="csv", header=None)
-            print("Returned data filepaths:", wvn_filepath, spect_filepath)
+            wvn_filepath = wdata.save_data(self.current_wvn.reshape(-1, 1), self.operations,
+                                           base_dir=".", file_ext="csv", header="Wavelength")
+            spect_filepath = wdata.save_data(self.current_spect.reshape(-1, 1), self.operations,
+                                             base_dir=".", file_ext="csv", header="SpectralIntensity")
             QMessageBox.information(self, "Saved",
                                     f"Data saved to:\n{wvn_filepath}\n{spect_filepath}")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to save data: {e}")
 
     def on_load_rdata_files(self):
-        """
-        加载 rData 文件：
-          1. Lipid FP 数据（文本文件），使用 utils.io.rdata.read_txt_file 读取，
-             并取其第二列开始数据求均值作为 spectrum；
-          2. WL Correction 数据，使用 read_txt_file 或 getwlcorrfrompath 读取；
-          3. Calibration 数据（MAT 文件），使用 getwvnfrompath 读取。
-        """
-        # 选择 Lipid FP 数据文件
         data_file, _ = QFileDialog.getOpenFileName(self, "Select Lipid FP Data", "",
                                                    "Text Files (*.txt);;All Files (*)")
         if not data_file:
             return
-        # 选择 WL Correction 数据文件
         wlcorr_file, _ = QFileDialog.getOpenFileName(self, "Select WL Correction Data", "",
                                                      "Text Files (*.txt);;All Files (*)")
         if not wlcorr_file:
             return
-        # 选择 Calibration 文件（MAT 文件）
         wvn_file, _ = QFileDialog.getOpenFileName(self, "Select Calibration File", "",
                                                   "MAT Files (*.mat);;All Files (*)")
         if not wvn_file:
             return
 
         try:
-            # 使用 read_txt_file 读取 Lipid FP 数据文件
             data_df = rdata.read_txt_file(data_file, delimiter=',', header=None)
             if data_df is None:
-                QMessageBox.warning(self, "Error", "Can't Read Data")
+                QMessageBox.warning(self, "Error", "Can't read data file")
                 return
             if data_df.shape[1] < 2:
-                QMessageBox.warning(self, "Error", "Error format, Col Must Be 2.")
+                QMessageBox.warning(self, "Error", "Data file format error, must have at least 2 columns.")
                 return
-            # 取第二列以后数据的均值作为 spectrum
             self.current_spect = data_df.iloc[:, 1:].mean(axis=1).to_numpy().astype(np.float64)
 
-            # 读取 WL Correction 文件（返回 DataFrame），转换为 numpy 数组
             wl_corr = rdata.read_txt_file(wlcorr_file)
             if wl_corr is None:
-                QMessageBox.warning(self, "Error", "Can't Read WL file")
+                QMessageBox.warning(self, "Error", "Can't read WL Correction file")
                 return
             self.wlCorr = wl_corr.to_numpy().astype(np.float64)
 
-            # 读取 Calibration 文件，获取波长数据
             self.wvnFull = rdata.getwvnfrompath(wvn_file).flatten().astype(np.float64)
             self.current_wvn = self.wvnFull.copy()
 
             self.operations.append("LoadData")
             self.update_plot()
-            QMessageBox.information(self, "Loaded", "Data loaded successfully.")
+            QMessageBox.information(self, "Loaded", "rData files loaded successfully.")
         except Exception as e:
-            QMessageBox.warning(self, "Error", f"Reading Data Failed: {e}")
+            QMessageBox.warning(self, "Error", f"Failed to read rData files: {e}")
 
 
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = P_Mean_Process_UI()
+    window.show()
+    sys.exit(app.exec_())

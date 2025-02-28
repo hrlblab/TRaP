@@ -78,13 +78,10 @@ class ConfigManagerUI(QWidget):
                     "730": ["Blaze"]
                 }
             },
-            "clinical": {
-                "wavelengths": ["730"],
-                "detectors": {
-                    "730": ["blaze"]
-                }
+            "Renishaw": {
+                "wavelengths": ["785", "633"],
             },
-            "portable": {
+            "Portable": {
                 "wavelengths": ["750", "730"],
                 # portable系统不需要 Detector 参数，此处不设置 detectors 键
             },
@@ -203,7 +200,7 @@ class ConfigManagerUI(QWidget):
     def update_detector_options(self):
         system = self.inputs["System"].currentText()
         # 如果该系统不需要 Detector 参数，则隐藏对应控件
-        if system in ["portable", "renishaw"]:
+        if system in ["Portable", "Renishaw"]:
             self.labels["Detector"].setVisible(False)
             self.inputs["Detector"].setVisible(False)
             # 保存时将 Detector 参数清空
