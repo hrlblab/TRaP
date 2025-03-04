@@ -80,12 +80,10 @@ class P_Mean_Process_UI(QMainWindow):
         # Record operations (for file naming)
         self.operations = []
 
-        # History: store processing states as dictionaries
+        # History: store processing states as dictionaries; now also store a snapshot of operations.
         self.history = []
         self.initUI()
         self.add_history("Initial")
-
-
 
     def initUI(self):
         central_widget = QWidget()
@@ -194,6 +192,7 @@ class P_Mean_Process_UI(QMainWindow):
             "op": op_name,
             "wvn": np.copy(self.current_wvn),
             "spect": np.copy(self.current_spect),
+            "ops": self.operations.copy(),  # Save a snapshot of operations
             "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S")
         }
         self.history.append(state)
@@ -208,7 +207,8 @@ class P_Mean_Process_UI(QMainWindow):
         state = self.history[idx]
         self.current_wvn = np.copy(state["wvn"])
         self.current_spect = np.copy(state["spect"])
-        self.operations.append(f"RevertTo({state['op']})")
+        # Instead of appending a revert operation, restore the operations list to that snapshot.
+        self.operations = state["ops"].copy()
         self.update_plot()
 
     # Processing functions
@@ -292,9 +292,9 @@ class P_Mean_Process_UI(QMainWindow):
             QMessageBox.warning(self, "Error", "Empty data, cannot save!")
             return
         try:
-            wvn_filepath = wdata.save_data(self.current_wvn.reshape(-1, 1), self.operations,
+            wvn_filepath = wdata.save_data(self.current_wvn.reshape(-1, 1),'Wvn', self.operations,
                                            base_dir=".", file_ext="csv", header="Wavelength")
-            spect_filepath = wdata.save_data(self.current_spect.reshape(-1, 1), self.operations,
+            spect_filepath = wdata.save_data(self.current_spect.reshape(-1, 1),'Spect', self.operations,
                                              base_dir=".", file_ext="csv", header="SpectralIntensity")
             QMessageBox.information(self, "Saved",
                                     f"Data saved to:\n{wvn_filepath}\n{spect_filepath}")
