@@ -10,7 +10,7 @@ import pandas as pd  # Ensure pandas is imported
 from PyQt5.QtCore import QDir, Qt
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton,
-                             QLineEdit, QCheckBox, QVBoxLayout, QFileDialog, QMessageBox,
+                             QLineEdit, QVBoxLayout, QFileDialog, QMessageBox,
                              QHBoxLayout, QComboBox, QListWidget)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -80,17 +80,27 @@ class P_Mean_Process_UI(QMainWindow):
         # Record operations (for file naming)
         self.operations = []
 
-        # History: store processing states as dictionaries
+        # History: store processing states as dictionaries (with snapshot of operations)
         self.history = []
+
+        # Standard processing steps in fixed order
+        self.processing_steps = [
+            "SubtractBaseline",
+            "SpectralResponseCorrection",
+            "CosmicRayRemoval",
+            "Truncate",
+            "Binning",
+            "Denoise",
+            "FluorescenceBackgroundSubtraction"
+        ]
+        self.current_step_index = 0
+
         self.initUI()
         self.add_history("Initial")
-
-
 
     def initUI(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
@@ -115,7 +125,7 @@ class P_Mean_Process_UI(QMainWindow):
         param_layout.addWidget(self.edit_polyorder)
         layout.addLayout(param_layout)
 
-        # Denoise method selection
+        # Denoise method selection (for Denoise step)
         denoise_layout = QHBoxLayout()
         self.label_denoise = QLabel("Denoise Method:")
         denoise_layout.addWidget(self.label_denoise)
@@ -128,60 +138,36 @@ class P_Mean_Process_UI(QMainWindow):
         self.label_saved_file = QLabel("Current File Saved: None")
         layout.addWidget(self.label_saved_file)
 
+        # Label to show next step
+        self.label_next_step = QLabel("Next Step: " + self.processing_steps[self.current_step_index])
+        layout.addWidget(self.label_next_step)
+
         # History list for process visualization
         history_layout = QVBoxLayout()
         history_label = QLabel("Processing History:")
         history_layout.addWidget(history_label)
         self.history_list = QListWidget()
         history_layout.addWidget(self.history_list)
-        btn_revert = QPushButton("Revert to Selected Step")
-        btn_revert.clicked.connect(self.on_revert_history)
-        history_layout.addWidget(btn_revert)
         layout.addLayout(history_layout)
 
-        # Button area
-        btn_layout = QHBoxLayout()
-        layout.addLayout(btn_layout)
-
-        btn_subtract = QPushButton("Subtract Baseline")
-        btn_subtract.clicked.connect(self.on_subtract_baseline)
-        btn_layout.addWidget(btn_subtract)
-
-        btn_response = QPushButton("Spectral Response Correction")
-        btn_response.clicked.connect(self.on_spectral_response_correction)
-        btn_layout.addWidget(btn_response)
-
-        btn_cosmic = QPushButton("Cosmic Ray Removal")
-        btn_cosmic.clicked.connect(self.on_cosmic_ray_removal)
-        btn_layout.addWidget(btn_cosmic)
-
-        btn_truncate = QPushButton("Truncate")
-        btn_truncate.clicked.connect(self.on_truncate)
-        btn_layout.addWidget(btn_truncate)
-
-        btn_binning = QPushButton("Binning")
-        btn_binning.clicked.connect(self.on_binning)
-        btn_layout.addWidget(btn_binning)
-
-        btn_denoise = QPushButton("Denoise")
-        btn_denoise.clicked.connect(self.on_denoise)
-        btn_layout.addWidget(btn_denoise)
-
-        btn_FluorBackSub = QPushButton("FluorescenceBackgroundSubtraction")
-        btn_FluorBackSub.clicked.connect(self.on_FluorescenceBackgroundSubtraction)
-        btn_layout.addWidget(btn_FluorBackSub)
-
+        # Navigation buttons (Previous, Next, Save, Load)
+        nav_layout = QHBoxLayout()
+        btn_previous = QPushButton("Previous")
+        btn_previous.clicked.connect(self.on_previous_step)
+        nav_layout.addWidget(btn_previous)
+        btn_next = QPushButton("Next")
+        btn_next.clicked.connect(self.on_next_step)
+        nav_layout.addWidget(btn_next)
         btn_save_fig = QPushButton("Save Figure")
         btn_save_fig.clicked.connect(self.on_save_figure)
-        btn_layout.addWidget(btn_save_fig)
-
+        nav_layout.addWidget(btn_save_fig)
         btn_save_data = QPushButton("Save Data")
         btn_save_data.clicked.connect(self.on_save_data)
-        btn_layout.addWidget(btn_save_data)
-
+        nav_layout.addWidget(btn_save_data)
         btn_load_rdata = QPushButton("Load Data Files")
         btn_load_rdata.clicked.connect(self.on_load_rdata_files)
-        btn_layout.addWidget(btn_load_rdata)
+        nav_layout.addWidget(btn_load_rdata)
+        layout.addLayout(nav_layout)
 
     def update_plot(self):
         if self.current_wvn is not None and len(self.current_wvn) == len(self.current_spect):
@@ -194,90 +180,96 @@ class P_Mean_Process_UI(QMainWindow):
             "op": op_name,
             "wvn": np.copy(self.current_wvn),
             "spect": np.copy(self.current_spect),
+            "ops": self.operations.copy(),  # Save a snapshot of operations
             "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S")
         }
         self.history.append(state)
         self.history_list.addItem(f"{op_name} ({state['timestamp']})")
+        if self.current_step_index < len(self.processing_steps):
+            self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
+        else:
+            self.label_next_step.setText("Processing Complete")
 
-    def on_revert_history(self):
-        selected_items = self.history_list.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self, "Error", "Please select a history step to revert to.")
+    def on_previous_step(self):
+        # Go back one step if available and remove the corresponding history entry.
+        if len(self.history) < 3:
+            QMessageBox.warning(self, "Error", "No previous state available.")
             return
-        idx = self.history_list.row(selected_items[0])
-        state = self.history[idx]
-        self.current_wvn = np.copy(state["wvn"])
-        self.current_spect = np.copy(state["spect"])
-        self.operations.append(f"RevertTo({state['op']})")
+        # Remove the last state from history and remove its entry from the list.
+        self.history.pop()
+        self.history_list.takeItem(self.history_list.count() - 1)
+        last_state = self.history[-1]
+        self.current_wvn = np.copy(last_state["wvn"])
+        self.current_spect = np.copy(last_state["spect"])
+        self.operations = last_state["ops"].copy()
+        if self.current_step_index > 0:
+            self.current_step_index -= 1
         self.update_plot()
+        self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
 
-    # Processing functions
-    def on_subtract_baseline(self):
-        self.current_spect = subtractBaseline(self.current_spect)
-        self.operations.append("SubtractBaseline")
-        self.update_plot()
-        self.add_history("SubtractBaseline")
-
-    def on_spectral_response_correction(self):
-        self.current_spect = SpectralResponseCorrection(self.wlCorr, self.current_spect)
-        self.operations.append("SpectralResponseCorrection")
-        self.update_plot()
-        self.add_history("SpectralResponseCorrection")
-
-    def on_cosmic_ray_removal(self):
-        self.current_spect = CosmicRayRemoval(self.current_spect)
-        self.operations.append("CosmicRayRemoval")
-        self.update_plot()
-        self.add_history("CosmicRayRemoval")
-
-    def on_truncate(self):
-        try:
-            start = float(self.edit_start.text())
-            stop = float(self.edit_stop.text())
-        except ValueError:
-            QMessageBox.warning(self, "Error", "Start and Stop must be numbers!")
+    def on_next_step(self):
+        if self.current_step_index >= len(self.processing_steps):
+            QMessageBox.information(self, "Info", "Processing complete.")
             return
-        self.current_wvn, self.current_spect = Truncate(start, stop, self.wvnFull, self.current_spect)
-        self.operations.append(f"Truncate({start}-{stop})")
-        self.update_plot()
-        self.add_history(f"Truncate({start}-{stop})")
-
-    def on_binning(self):
-        if self.current_wvn.size == 0:
-            QMessageBox.warning(self, "Warning", "Current data is empty!")
+        step = self.processing_steps[self.current_step_index]
+        # Apply the processing step according to the standardized order.
+        if step == "SubtractBaseline":
+            self.current_spect = subtractBaseline(self.current_spect)
+            self.operations.append("SubtractBaseline")
+        elif step == "SpectralResponseCorrection":
+            self.current_spect = SpectralResponseCorrection(self.wlCorr, self.current_spect)
+            self.operations.append("SpectralResponseCorrection")
+        elif step == "CosmicRayRemoval":
+            self.current_spect = CosmicRayRemoval(self.current_spect)
+            self.operations.append("CosmicRayRemoval")
+        elif step == "Truncate":
+            try:
+                start = float(self.edit_start.text())
+                stop = float(self.edit_stop.text())
+            except ValueError:
+                QMessageBox.warning(self, "Error", "Start and Stop must be numbers!")
+                return
+            self.current_wvn, self.current_spect = Truncate(start, stop, self.wvnFull, self.current_spect)
+            self.operations.append(f"Truncate({start}-{stop})")
+        elif step == "Binning":
+            if self.current_wvn.size == 0:
+                QMessageBox.warning(self, "Warning", "Current data is empty!")
+                return
+            start = self.current_wvn[0]
+            stop = self.current_wvn[-1]
+            binned_spect, new_wvn = Binning(start, stop, self.current_wvn, self.current_spect, binwidth=3.5)
+            self.current_spect = binned_spect
+            self.current_wvn = new_wvn
+            self.operations.append("Binning")
+        elif step == "Denoise":
+            method = self.combo_denoise.currentText()
+            if method == "Savitzky-Golay":
+                self.current_spect = Denoise(self.current_spect, SGorder=2, SGframe=7)
+            elif method == "Moving Average":
+                self.current_spect = moving_average(self.current_spect, window=5)
+            elif method == "Median Filter":
+                self.current_spect = median_filter(self.current_spect, kernel_size=5)
+            self.operations.append(f"Denoise({method})")
+        elif step == "FluorescenceBackgroundSubtraction":
+            try:
+                polyorder = int(self.edit_polyorder.text())
+            except ValueError:
+                QMessageBox.warning(self, "Error", "Polyorder must be an integer!")
+                return
+            base, finalSpect = FluorescenceBackgroundSubtraction(self.current_spect, polyorder)
+            self.current_spect = finalSpect
+            self.operations.append(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
+        else:
+            QMessageBox.warning(self, "Error", "Unknown processing step.")
             return
-        start = self.current_wvn[0]
-        stop = self.current_wvn[-1]
-        binned_spect, new_wvn = Binning(start, stop, self.current_wvn, self.current_spect, binwidth=3.5)
-        self.current_spect = binned_spect
-        self.current_wvn = new_wvn
-        self.operations.append("Binning")
-        self.update_plot()
-        self.add_history("Binning")
 
-    def on_denoise(self):
-        method = self.combo_denoise.currentText()
-        if method == "Savitzky-Golay":
-            self.current_spect = Denoise(self.current_spect, SGorder=2, SGframe=7)
-        elif method == "Moving Average":
-            self.current_spect = moving_average(self.current_spect, window=5)
-        elif method == "Median Filter":
-            self.current_spect = median_filter(self.current_spect, kernel_size=5)
-        self.operations.append(f"Denoise({method})")
+        self.add_history(step)
+        self.current_step_index += 1
+        if self.current_step_index < len(self.processing_steps):
+            self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
+        else:
+            self.label_next_step.setText("Processing Complete")
         self.update_plot()
-        self.add_history(f"Denoise({method})")
-
-    def on_FluorescenceBackgroundSubtraction(self):
-        try:
-            polyorder = int(self.edit_polyorder.text())
-        except ValueError:
-            QMessageBox.warning(self, "Error", "Polyorder must be an integer!")
-            return
-        base, finalSpect = FluorescenceBackgroundSubtraction(self.current_spect, polyorder)
-        self.current_spect = finalSpect
-        self.operations.append(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
-        self.update_plot()
-        self.add_history(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
 
     def on_save_figure(self):
         try:
