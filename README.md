@@ -85,10 +85,10 @@ Contributions are welcome! To contribute to TRaP App, please follow these steps:
 3. **Make Your Changes:**
    Ensure your code adheres to the project’s style guidelines and includes appropriate tests.
 4. **Commit Your Changes:**
-  Write clear and concise commit messages. For example:
-  ```bash
-  git commit -m "Add feature to improve XYZ functionality"
-  ```
+    Write clear and concise commit messages. For example:
+    ```bash
+    git commit -m "Add feature to improve XYZ functionality"
+    ```
 5. **Push to Your Branch:**
    ```bash
    git push origin feature/YourFeatureName
