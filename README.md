@@ -60,9 +60,9 @@ Follow these instructions to set up the project locally.
    ```
 2. **Install dependencies:**
 
-  ```bash
-  pip install -r requirements.txt
-  ```
+    ```bash
+    pip install -r requirements.txt
+    ```
 ### Usage
 Running this project by using the following command:
   ``` bash
