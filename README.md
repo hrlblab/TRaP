@@ -37,11 +37,11 @@ TRaP_App/
 The `UI_utils` package is designed to encapsulate common UI functions used across the application:
 - **UI_Config_Manager.py:**  
   Contains an UI builder and config manager class that allow users to save and load the parameters for RAMAN process.
-- **UI_P_Mean_Process.py:**
+- **UI_P_Mean_Process.py:**  
   Contains an UI builder for P Mean process for a single fingerprint data. This UI allows users to save and load the config file for P Mean process including parameters, methods, etc. for not only processing a single fingerprint data but also optimizing the parameters for futher batch processing.
-- **UI_P_Mean_Batch_Process.py:**
+- **UI_P_Mean_Batch_Process.py:**  
   Contains an UI builder for P Mean process for multiple fingerprint data. This UI allows users to load the config file or use default setting to apply P Mean process to multiple fingerprint data.
-- **UI_System_Select.py**
+- **UI_System_Select.py**  
   Contains an UI builder that allow users to select different systems and process steps.
 
 
