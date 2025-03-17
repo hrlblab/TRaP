@@ -4,6 +4,8 @@ import sys
 import os
 from datetime import datetime
 
+from holoviews.operation.normalization import Normalization
+
 from utils.io import rdata, wdata
 import numpy as np
 import pandas as pd  # Ensure pandas is imported
@@ -14,21 +16,24 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushBu
                              QHBoxLayout, QComboBox, QListWidget)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from scipy.signal import medfilt
 
 from utils.SpectralPreprocess import (Binning, Denoise, Truncate, CosmicRayRemoval,
                                       SpectralResponseCorrection, subtractBaseline,
-                                      FluorescenceBackgroundSubtraction)
-from scipy.signal import medfilt
+                                      FluorescenceBackgroundSubtraction, Normalize)
 
 
 # --- Additional denoising functions ---
 def moving_average(data, window=5):
-    # Convolve with a uniform window
-    return np.convolve(data, np.ones(window)/window, mode='same')
+    return np.convolve(data, np.ones(window) / window, mode='same')
 
 
 def median_filter(data, kernel_size=5):
     return medfilt(data, kernel_size=kernel_size)
+
+
+# Configuration file name
+CONFIG_FILE = "p_mean_config.json"
 
 
 class PlotCanvas(FigureCanvas):
@@ -41,7 +46,6 @@ class PlotCanvas(FigureCanvas):
 
     def plot(self, data):
         self.axes.clear()
-        # If data is a tuple (x, y) then plot x-y curve; otherwise, plot y only.
         if isinstance(data, tuple) and len(data) == 2:
             x, y = data
             self.axes.plot(x, y)
@@ -51,11 +55,9 @@ class PlotCanvas(FigureCanvas):
         self.draw()
 
     def draw_lines(self, positions, colors):
-        # Clear existing lines
         for line in self.plotted_lines:
             line.remove()
         self.plotted_lines.clear()
-        # Draw new lines and store their references
         for pos, color in zip(positions, colors):
             line = self.axes.axhline(y=pos, color=color, linewidth=1)
             self.plotted_lines.append(line)
@@ -68,22 +70,16 @@ class P_Mean_Process_UI(QMainWindow):
         self.setWindowTitle("Spectrum Data Process")
         self.setGeometry(100, 100, 900, 600)
 
-        # Initial simulated data: wavenumber and spectrum
+        # Initial simulated data
         self.wvnFull = np.linspace(400, 900, 500)
         self.rawSpect = np.sin(self.wvnFull / 100) + np.random.normal(0, 0.1, self.wvnFull.shape)
         self.current_spect = self.rawSpect.copy()
         self.current_wvn = self.wvnFull.copy()
 
-        # Dummy WL Correction array (shape=(500,1))
         self.wlCorr = np.ones((500, 1)) * 1.2
 
-        # Record operations (for file naming)
         self.operations = []
-
-        # History: store processing states as dictionaries (with snapshot of operations)
         self.history = []
-
-        # Standard processing steps in fixed order
         self.processing_steps = [
             "SubtractBaseline",
             "SpectralResponseCorrection",
@@ -91,7 +87,8 @@ class P_Mean_Process_UI(QMainWindow):
             "Truncate",
             "Binning",
             "Denoise",
-            "FluorescenceBackgroundSubtraction"
+            "FluorescenceBackgroundSubtraction",
+            "Normalization"
         ]
         self.current_step_index = 0
 
@@ -104,7 +101,7 @@ class P_Mean_Process_UI(QMainWindow):
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
-        # PlotCanvas instance
+        # PlotCanvas
         self.canvas = PlotCanvas(self, width=7, height=5, dpi=100)
         layout.addWidget(self.canvas)
         self.update_plot()
@@ -125,7 +122,7 @@ class P_Mean_Process_UI(QMainWindow):
         param_layout.addWidget(self.edit_polyorder)
         layout.addLayout(param_layout)
 
-        # Denoise method selection (for Denoise step)
+        # Denoise method selection
         denoise_layout = QHBoxLayout()
         self.label_denoise = QLabel("Denoise Method:")
         denoise_layout.addWidget(self.label_denoise)
@@ -133,16 +130,28 @@ class P_Mean_Process_UI(QMainWindow):
         self.combo_denoise.addItems(["Savitzky-Golay", "Moving Average", "Median Filter"])
         denoise_layout.addWidget(self.combo_denoise)
         layout.addLayout(denoise_layout)
+        self.label_denoise.setVisible(False)
+        self.combo_denoise.setVisible(False)
 
-        # Label to show current saved file name
+        # Configuration buttons (Save Config and Load Config)
+        config_layout = QHBoxLayout()
+        btn_save_config = QPushButton("Save Config")
+        btn_save_config.clicked.connect(self.on_save_config)
+        config_layout.addWidget(btn_save_config)
+        btn_load_config = QPushButton("Load Config")
+        btn_load_config.clicked.connect(self.on_load_config)
+        config_layout.addWidget(btn_load_config)
+        layout.addLayout(config_layout)
+
+        # Saved file label
         self.label_saved_file = QLabel("Current File Saved: None")
         layout.addWidget(self.label_saved_file)
 
-        # Label to show next step
+        # Next Step label
         self.label_next_step = QLabel("Next Step: " + self.processing_steps[self.current_step_index])
         layout.addWidget(self.label_next_step)
 
-        # History list for process visualization
+        # History list
         history_layout = QVBoxLayout()
         history_label = QLabel("Processing History:")
         history_layout.addWidget(history_label)
@@ -150,7 +159,7 @@ class P_Mean_Process_UI(QMainWindow):
         history_layout.addWidget(self.history_list)
         layout.addLayout(history_layout)
 
-        # Navigation buttons (Previous, Next, Save, Load)
+        # Navigation buttons (Previous, Next, Save, Load Data)
         nav_layout = QHBoxLayout()
         btn_previous = QPushButton("Previous")
         btn_previous.clicked.connect(self.on_previous_step)
@@ -175,12 +184,22 @@ class P_Mean_Process_UI(QMainWindow):
         else:
             self.canvas.plot(self.current_spect)
 
+    def update_step_ui(self):
+        # Only show the denoise method selection when the current step is "Denoise"
+        if self.current_step_index < len(self.processing_steps) and \
+                self.processing_steps[self.current_step_index] == "Denoise":
+            self.label_denoise.setVisible(True)
+            self.combo_denoise.setVisible(True)
+        else:
+            self.label_denoise.setVisible(False)
+            self.combo_denoise.setVisible(False)
+
     def add_history(self, op_name):
         state = {
             "op": op_name,
             "wvn": np.copy(self.current_wvn),
             "spect": np.copy(self.current_spect),
-            "ops": self.operations.copy(),  # Save a snapshot of operations
+            "ops": self.operations.copy(),
             "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S")
         }
         self.history.append(state)
@@ -190,12 +209,52 @@ class P_Mean_Process_UI(QMainWindow):
         else:
             self.label_next_step.setText("Processing Complete")
 
+    def on_save_config(self):
+        # Build configuration from current UI parameters.
+        config = {}
+        try:
+            config["Start"] = float(self.edit_start.text())
+            config["Stop"] = float(self.edit_stop.text())
+            config["Polyorder"] = int(self.edit_polyorder.text())
+            config["DenoiseMethod"] = self.combo_denoise.currentText()
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Parameter input error: {e}")
+            return
+
+        # Open a file save dialog for the config file.
+        options = QFileDialog.Options()
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save Config File", "",
+                                                  "JSON Files (*.json);;All Files (*)", options=options)
+        if fileName:
+            try:
+                with open(fileName, "w", encoding="utf-8") as f:
+                    json.dump(config, f, ensure_ascii=False, indent=4)
+                QMessageBox.information(self, "Config Saved", f"Configuration saved successfully to:\n{fileName}")
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to save config: {e}")
+
+    def on_load_config(self):
+        options = QFileDialog.Options()
+        fileName, _ = QFileDialog.getOpenFileName(self, "Load Config File", "",
+                                                  "JSON Files (*.json);;All Files (*)", options=options)
+        if fileName:
+            try:
+                with open(fileName, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                self.edit_start.setText(str(config.get("Start", 900)))
+                self.edit_stop.setText(str(config.get("Stop", 1700)))
+                self.edit_polyorder.setText(str(config.get("Polyorder", 7)))
+                self.combo_denoise.setCurrentText(config.get("DenoiseMethod", "Savitzky-Golay"))
+                QMessageBox.information(self, "Config Loaded", "Configuration loaded successfully.")
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to load config: {e}")
+        else:
+            QMessageBox.warning(self, "Error", "No configuration file selected.")
+
     def on_previous_step(self):
-        # Go back one step if available and remove the corresponding history entry.
         if len(self.history) < 3:
             QMessageBox.warning(self, "Error", "No previous state available.")
             return
-        # Remove the last state from history and remove its entry from the list.
         self.history.pop()
         self.history_list.takeItem(self.history_list.count() - 1)
         last_state = self.history[-1]
@@ -212,7 +271,6 @@ class P_Mean_Process_UI(QMainWindow):
             QMessageBox.information(self, "Info", "Processing complete.")
             return
         step = self.processing_steps[self.current_step_index]
-        # Apply the processing step according to the standardized order.
         if step == "SubtractBaseline":
             self.current_spect = subtractBaseline(self.current_spect)
             self.operations.append("SubtractBaseline")
@@ -259,6 +317,9 @@ class P_Mean_Process_UI(QMainWindow):
             base, finalSpect = FluorescenceBackgroundSubtraction(self.current_spect, polyorder)
             self.current_spect = finalSpect
             self.operations.append(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
+        elif step == "Normalization":
+            self.current_spect = Normalize(self.current_spect)
+            self.operations.append(f"Normalization")
         else:
             QMessageBox.warning(self, "Error", "Unknown processing step.")
             return
@@ -270,6 +331,7 @@ class P_Mean_Process_UI(QMainWindow):
         else:
             self.label_next_step.setText("Processing Complete")
         self.update_plot()
+        self.update_step_ui()
 
     def on_save_figure(self):
         try:
@@ -284,9 +346,9 @@ class P_Mean_Process_UI(QMainWindow):
             QMessageBox.warning(self, "Error", "Empty data, cannot save!")
             return
         try:
-            wvn_filepath = wdata.save_data(self.current_wvn.reshape(-1, 1), self.operations,
+            wvn_filepath = wdata.save_data(self.current_wvn.reshape(-1, 1), operations=self.operations, prefix='wvn',
                                            base_dir=".", file_ext="csv", header="Wavelength")
-            spect_filepath = wdata.save_data(self.current_spect.reshape(-1, 1), self.operations,
+            spect_filepath = wdata.save_data(self.current_spect.reshape(-1, 1), operations=self.operations, prefix='spect',
                                              base_dir=".", file_ext="csv", header="SpectralIntensity")
             QMessageBox.information(self, "Saved",
                                     f"Data saved to:\n{wvn_filepath}\n{spect_filepath}")
@@ -326,7 +388,14 @@ class P_Mean_Process_UI(QMainWindow):
             self.wvnFull = rdata.getwvnfrompath(wvn_file).flatten().astype(np.float64)
             self.current_wvn = self.wvnFull.copy()
 
+            # Reset history and operations when loading new data
+            self.history = []
+            self.history_list.clear()
+            self.operations = []
+            self.current_step_index = 0
+
             self.operations.append("LoadData")
+            self.add_history("LoadData")
             self.update_plot()
             QMessageBox.information(self, "Loaded", "rData files loaded successfully.")
         except Exception as e:

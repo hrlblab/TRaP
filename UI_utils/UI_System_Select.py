@@ -15,6 +15,7 @@ from matplotlib.figure import Figure
 
 from UI_utils.UI_Config_Manager import ConfigManagerUI
 from UI_utils.UI_P_Mean_Process import P_Mean_Process_UI
+from UI_utils.UI_P_Mean_Batch_Process import BatchPMeanUI
 
 LOGO_ADDR = 'vanderbilt_biophotonics_center_logo.jpg'
 
@@ -40,7 +41,7 @@ class MainWindow(QWidget):
         self.layout.addWidget(self.logoLabel)
 
         self.buttons = []
-        self.titles = ["Config Manager", "Cart", "Spectrum Process", "System 3"]
+        self.titles = ["Config Manager", "Cart", "Spectrum Process", "Spectrum Batch Process"]
         self.opened_windows = []
 
         for title in self.titles:
@@ -56,6 +57,8 @@ class MainWindow(QWidget):
             new_window = P_Mean_Process_UI()
         elif title == 'Config Manager':
             new_window = ConfigManagerUI()
+        elif title == 'Spectrum Batch Process':
+            new_window = BatchPMeanUI()
 
         self.opened_windows.append(new_window)
         new_window.show()
