@@ -22,6 +22,7 @@ The TRaP APP is designed for a standard RAMAN Process Application with GUI via p
 Working on.
 
 ## Project Structure
+```bash
 TRaP_App/
 ├── data/                 # Example data for test purpose
 ├── UI_utils/             # UI initialization tools
@@ -30,6 +31,7 @@ TRaP_App/
 ├── TRaP_GUI.py           # Main function entrance
 ├── .gitignore            # Git ignore rules
 └── README.md             # Project overview and documentation
+```
 
 ### UI_utils package
 The `UI_utils` package is designed to encapsulate common UI functions used across the application:
