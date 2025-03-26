@@ -1,0 +1,5 @@
+Data is stored as single columns within .csv files
+
+Cart-based system using 680nm excitation used a lensed probe and HT spectrograph and Blaze CCD
+
+x-axis calibration and WL correciton files (NIST_corr) have already been calculated and uploaded
