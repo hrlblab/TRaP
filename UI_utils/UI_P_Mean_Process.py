@@ -13,7 +13,7 @@ from PyQt5.QtCore import QDir, Qt
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton,
                              QLineEdit, QVBoxLayout, QFileDialog, QMessageBox,
-                             QHBoxLayout, QComboBox, QListWidget)
+                             QHBoxLayout, QComboBox, QListWidget, QDialog)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from scipy.signal import medfilt
@@ -101,7 +101,7 @@ class P_Mean_Process_UI(QMainWindow):
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
-        # PlotCanvas
+        # PlotCanvas instance
         self.canvas = PlotCanvas(self, width=7, height=5, dpi=100)
         layout.addWidget(self.canvas)
         self.update_plot()
@@ -122,7 +122,7 @@ class P_Mean_Process_UI(QMainWindow):
         param_layout.addWidget(self.edit_polyorder)
         layout.addLayout(param_layout)
 
-        # Denoise method selection
+        # Denoise method selection (visible only in "Denoise" step)
         denoise_layout = QHBoxLayout()
         self.label_denoise = QLabel("Denoise Method:")
         denoise_layout.addWidget(self.label_denoise)
@@ -132,6 +132,19 @@ class P_Mean_Process_UI(QMainWindow):
         layout.addLayout(denoise_layout)
         self.label_denoise.setVisible(False)
         self.combo_denoise.setVisible(False)
+
+        # Comparison option: only displayed during FBS step.
+        compare_layout = QHBoxLayout()
+        self.label_compare = QLabel("Generate Comparison Plot:")
+        compare_layout.addWidget(self.label_compare)
+        self.chk_compare = QComboBox()
+        self.chk_compare.addItems(["Yes", "No"])
+        self.chk_compare.setCurrentText("Yes")
+        compare_layout.addWidget(self.chk_compare)
+        layout.addLayout(compare_layout)
+        # Initially, hide the comparison option until reaching FBS step.
+        self.label_compare.setVisible(False)
+        self.chk_compare.setVisible(False)
 
         # Configuration buttons (Save Config and Load Config)
         config_layout = QHBoxLayout()
@@ -159,7 +172,7 @@ class P_Mean_Process_UI(QMainWindow):
         history_layout.addWidget(self.history_list)
         layout.addLayout(history_layout)
 
-        # Navigation buttons (Previous, Next, Save, Load Data)
+        # Navigation buttons (Previous, Next, Save Figure, Save Data, Load Data Files)
         nav_layout = QHBoxLayout()
         btn_previous = QPushButton("Previous")
         btn_previous.clicked.connect(self.on_previous_step)
@@ -185,14 +198,22 @@ class P_Mean_Process_UI(QMainWindow):
             self.canvas.plot(self.current_spect)
 
     def update_step_ui(self):
-        # Only show the denoise method selection when the current step is "Denoise"
+        # Only show the denoise method selection when current step is "Denoise"
         if self.current_step_index < len(self.processing_steps) and \
-                self.processing_steps[self.current_step_index] == "Denoise":
+           self.processing_steps[self.current_step_index] == "Denoise":
             self.label_denoise.setVisible(True)
             self.combo_denoise.setVisible(True)
         else:
             self.label_denoise.setVisible(False)
             self.combo_denoise.setVisible(False)
+        # Only show the comparison option when current step is "FluorescenceBackgroundSubtraction"
+        if self.current_step_index < len(self.processing_steps) and \
+           self.processing_steps[self.current_step_index] == "FluorescenceBackgroundSubtraction":
+            self.label_compare.setVisible(True)
+            self.chk_compare.setVisible(True)
+        else:
+            self.label_compare.setVisible(False)
+            self.chk_compare.setVisible(False)
 
     def add_history(self, op_name):
         state = {
@@ -208,6 +229,7 @@ class P_Mean_Process_UI(QMainWindow):
             self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
         else:
             self.label_next_step.setText("Processing Complete")
+        self.update_step_ui()
 
     def on_save_config(self):
         # Build configuration from current UI parameters.
@@ -221,7 +243,6 @@ class P_Mean_Process_UI(QMainWindow):
             QMessageBox.warning(self, "Error", f"Parameter input error: {e}")
             return
 
-        # Open a file save dialog for the config file.
         options = QFileDialog.Options()
         fileName, _ = QFileDialog.getSaveFileName(self, "Save Config File", "",
                                                   "JSON Files (*.json);;All Files (*)", options=options)
@@ -265,6 +286,7 @@ class P_Mean_Process_UI(QMainWindow):
             self.current_step_index -= 1
         self.update_plot()
         self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
+        self.update_step_ui()
 
     def on_next_step(self):
         if self.current_step_index >= len(self.processing_steps):
@@ -314,12 +336,28 @@ class P_Mean_Process_UI(QMainWindow):
             except ValueError:
                 QMessageBox.warning(self, "Error", "Polyorder must be an integer!")
                 return
+            # Save the current spectrum before processing for comparison
+            before = np.copy(self.current_spect)
             base, finalSpect = FluorescenceBackgroundSubtraction(self.current_spect, polyorder)
-            self.current_spect = finalSpect
             self.operations.append(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
+            self.current_spect = finalSpect
+            # Check if the user wants a comparison plot
+            if self.chk_compare.currentText() == "Yes":
+                if self.current_wvn is not None and len(self.current_wvn) == len(before):
+                    x = self.current_wvn
+                else:
+                    x = np.arange(len(before))
+                self.canvas.axes.clear()
+                self.canvas.axes.plot(x, before, label="Before FBS", color="blue", linestyle='-')
+                self.canvas.axes.plot(x, finalSpect, label="After FBS", color="red", linestyle='--')
+                self.canvas.axes.set_title("Fluorescence Background Subtraction")
+                self.canvas.axes.legend()
+                self.canvas.draw()
+            else:
+                self.update_plot()
         elif step == "Normalization":
             self.current_spect = Normalize(self.current_spect)
-            self.operations.append(f"Normalization")
+            self.operations.append("Normalization")
         else:
             QMessageBox.warning(self, "Error", "Unknown processing step.")
             return
@@ -330,7 +368,9 @@ class P_Mean_Process_UI(QMainWindow):
             self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
         else:
             self.label_next_step.setText("Processing Complete")
-        self.update_plot()
+        # Only call update_plot if the step did not already update the canvas (e.g., FBS step)
+        if step != "FluorescenceBackgroundSubtraction":
+            self.update_plot()
         self.update_step_ui()
 
     def on_save_figure(self):
@@ -400,7 +440,6 @@ class P_Mean_Process_UI(QMainWindow):
             QMessageBox.information(self, "Loaded", "rData files loaded successfully.")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to read rData files: {e}")
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
