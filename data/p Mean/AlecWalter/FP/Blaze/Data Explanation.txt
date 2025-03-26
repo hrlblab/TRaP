@@ -1,1 +1,4 @@
+Data is stored as single columns within .csv files
+
+785nm excitation used a lensed probe and HT spectrograph and Blaze CCD
 
