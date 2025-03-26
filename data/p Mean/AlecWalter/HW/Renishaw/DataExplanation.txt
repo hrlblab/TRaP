@@ -1,1 +1,8 @@
+Data is stored as two columns within a .txt
+Column 1 is wavenumber axis
+Column 2 is signal/measurement data
+each column has a header
 
+Microscope system using 785nm excitation and a 50x objective
+
+WL correciton files (HW_Luminescence_CorrFactor) has already been calculated and uploaded
