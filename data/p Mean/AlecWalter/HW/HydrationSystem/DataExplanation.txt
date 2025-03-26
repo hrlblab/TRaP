@@ -1,0 +1,7 @@
+Data is stored as single rows within .txt files
+
+Cart-based system using 680nm excitation, used a SORS probe and HT spectrograph and Pixis 400 CCD
+
+curve correction and region separation have already been applied
+
+x-axis calibration and WL correction files (NIST_corr) have already been calculated and uploaded
