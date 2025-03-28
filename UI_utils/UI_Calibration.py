@@ -182,8 +182,8 @@ class WaveformSelectionUI(QMainWindow):
         QMessageBox.information(self, "Next Step Processing", msg)
         # You can expand the data processing logic here.
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = WaveformSelectionUI()
-    window.show()
-    sys.exit(app.exec_())
+# if __name__ == "__main__":
+#     app = QApplication(sys.argv)
+#     window = WaveformSelectionUI()
+#     window.show()
+#     sys.exit(app.exec_())

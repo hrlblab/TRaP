@@ -472,8 +472,8 @@ class P_Mean_Process_UI(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to read rData files: {e}")
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = P_Mean_Process_UI()
-    window.show()
-    sys.exit(app.exec_())
+# if __name__ == "__main__":
+#     app = QApplication(sys.argv)
+#     window = P_Mean_Process_UI()
+#     window.show()
+#     sys.exit(app.exec_())

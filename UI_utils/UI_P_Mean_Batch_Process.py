@@ -194,8 +194,8 @@ class BatchPMeanUI(QMainWindow):
                                 "Batch processing complete.\nProcessed files:\n" + "\n".join(processed_files))
 
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = BatchPMeanUI()
-    window.show()
-    sys.exit(app.exec_())
+# if __name__ == "__main__":
+#     app = QApplication(sys.argv)
+#     window = BatchPMeanUI()
+#     window.show()
+#     sys.exit(app.exec_())

@@ -1,22 +1,13 @@
-import fnmatch
-import json
-import sys
-import os
-from datetime import datetime
 
-import numpy as np
 from PyQt5.QtCore import QDir, Qt
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QLabel, QPushButton, QLineEdit, QCheckBox, \
     QVBoxLayout, QFileDialog, QMessageBox, QHBoxLayout, QComboBox
 
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-
 from UI_utils.UI_Config_Manager import ConfigManagerUI
 from UI_utils.UI_P_Mean_Process import P_Mean_Process_UI
 from UI_utils.UI_P_Mean_Batch_Process import BatchPMeanUI
-
+from UI_utils.UI_Calibration import WaveformSelectionUI
 LOGO_ADDR = 'vanderbilt_biophotonics_center_logo.jpg'
 
 
@@ -41,7 +32,7 @@ class MainWindow(QWidget):
         self.layout.addWidget(self.logoLabel)
 
         self.buttons = []
-        self.titles = ["Config Manager", "Cart", "Spectrum Process", "Spectrum Batch Process"]
+        self.titles = ["Config Manager", "Calibration", "Spectrum Process", "Spectrum Batch Process"]
         self.opened_windows = []
 
         for title in self.titles:
@@ -59,6 +50,8 @@ class MainWindow(QWidget):
             new_window = ConfigManagerUI()
         elif title == 'Spectrum Batch Process':
             new_window = BatchPMeanUI()
+        elif title == 'Calibration':
+            new_window = WaveformSelectionUI()
 
         self.opened_windows.append(new_window)
         new_window.show()
