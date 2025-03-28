@@ -44,3 +44,35 @@ def getwvnfrompath(path):
     wvn = wvn_data['Cal']['Wvn'][0, 0]
     # print(wvn)
     return np.array(wvn, dtype=np.float64)
+
+def load_spectrum_data(filepath):
+    try:
+        # Try reading with header=None first
+        df = pd.read_csv(filepath, header=None)
+    except Exception:
+        # Retry with default header if header=None fails
+        df = pd.read_csv(filepath)
+
+    # Handle 1D case: single line
+    if df.shape[0] == 1:  # one row, many columns → make it a column vector
+
+        data = df.values.flatten().reshape(-1, 1).astype(np.float64)
+        return data
+
+    # Handle single column file
+    if df.shape[1] == 1:  # one column
+        data = df.iloc[:, 0].to_numpy().reshape(-1, 1).astype(np.float64)
+        return data
+
+    # Handle two columns with header
+    if df.shape[1] == 2 and not np.issubdtype(df.iloc[0, 1], np.number):
+        # Try re-reading and skipping header row
+        df = pd.read_csv(filepath, skiprows=1, header=None)
+        if df.shape[1] == 2:
+            data = df.iloc[:, 1].to_numpy().reshape(-1, 1).astype(np.float64)
+            return data
+
+    # Handle multi-column: average from second column
+    if df.shape[1] > 1:
+        data = df.iloc[:, 1:].mean(axis=1).to_numpy().reshape(-1, 1).astype(np.float64)
+        return data

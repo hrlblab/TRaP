@@ -174,8 +174,9 @@ class BatchPMeanUI(QMainWindow):
         for i in range(len(self.data_files)):
             try:
                 # Load raw spectrum data from each file.
-                data_df = rdata.read_txt_file(self.data_files[i], delimiter=',', header=None)
-                raw_spec = data_df.iloc[:, 1:].mean(axis=1).to_numpy().astype(np.float64)
+                data_df = rdata.load_spectrum_data(self.data_files[i])
+                raw_spec = data_df.flattern().astype(np.float64)
+                # raw_spec = data_df.iloc[:, 1:].mean(axis=1).to_numpy().astype(np.float64)
 
                 # Process using the p_mean_process function.
                 new_wvn, processed_spec = p_mean_process(raw_spec, wl_corr, wvn, self.config)

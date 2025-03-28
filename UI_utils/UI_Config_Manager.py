@@ -222,16 +222,17 @@ class ConfigManagerUI(QWidget):
                 det_combo.setCurrentIndex(0)
 
     def save_config(self):
-        # 先保存动态下拉框的值
+        # Update dynamic combo box values first
         self.config.params["System"] = self.inputs["System"].currentText()
         self.config.params["Exc Wavelength"] = self.inputs["Exc Wavelength"].currentText()
-        # 如果 Detector 控件可见，则更新，否则保持为空字符串
+
+        # Update Detector if visible
         if self.inputs["Detector"].isVisible():
             self.config.params["Detector"] = self.inputs["Detector"].currentText()
         else:
             self.config.params["Detector"] = ""
 
-        # 保存其他参数
+        # Update other parameters
         for param, input_field in self.inputs.items():
             if param in ["System", "Exc Wavelength", "Detector"]:
                 continue
@@ -253,7 +254,24 @@ class ConfigManagerUI(QWidget):
                         return
                 else:
                     self.config.params[param] = text
-        self.config.save_config()
+
+        # Use file dialog to let user choose save path
+        name_value = self.config.params["Name"].strip()
+        safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name_value)
+        default_filename = f"{safe_name}.json" if safe_name else "config.json"
+
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(self, "Save Config File", default_filename,
+                                                   "JSON Files (*.json);;All Files (*)", options=options)
+        if file_name:
+            try:
+                with open(file_name, 'w', encoding='utf-8') as f:
+                    json.dump(self.config.params, f, ensure_ascii=False, indent=4)
+                QMessageBox.information(self, "Success", f"Configuration saved to {file_name}")
+            except Exception as e:
+                QMessageBox.critical(self, "Save Failed", f"Failed to save configuration:\n{e}")
+        else:
+            QMessageBox.information(self, "Canceled", "Save operation was canceled.")
 
     def load_config_with_dialog(self):
         options = QFileDialog.Options()

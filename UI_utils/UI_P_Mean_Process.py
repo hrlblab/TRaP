@@ -1,28 +1,22 @@
-import fnmatch
 import json
 import sys
-import os
 from datetime import datetime
-
-from holoviews.operation.normalization import Normalization
 
 from utils.io import rdata, wdata
 import numpy as np
-import pandas as pd  # Ensure pandas is imported
-from PyQt5.QtCore import QDir, Qt
-from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton,
                              QLineEdit, QVBoxLayout, QFileDialog, QMessageBox,
                              QHBoxLayout, QComboBox, QListWidget, QDialog)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from scipy.signal import medfilt
+from UI_utils.UI_Config_Manager import ConfigManager
 
 from utils.SpectralPreprocess import (Binning, Denoise, Truncate, CosmicRayRemoval,
                                       SpectralResponseCorrection, subtractBaseline,
                                       FluorescenceBackgroundSubtraction, Normalize)
 
-
+config_manager = ConfigManager()
 # --- Additional denoising functions ---
 def moving_average(data, window=5):
     return np.convolve(data, np.ones(window) / window, mode='same')
@@ -67,12 +61,15 @@ class PlotCanvas(FigureCanvas):
 class P_Mean_Process_UI(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.current_system = config_manager.params.get("System", "")
+        print("Current System:", self.current_system)
+
         self.setWindowTitle("Spectrum Data Process")
         self.setGeometry(100, 100, 900, 600)
 
         # Initial simulated data
-        self.wvnFull = np.linspace(400, 900, 500)
-        self.rawSpect = np.sin(self.wvnFull / 100) + np.random.normal(0, 0.1, self.wvnFull.shape)
+        self.wvnFull = np.zeros([100, 1])
+        self.rawSpect = np.zeros(self.wvnFull.shape)
         self.current_spect = self.rawSpect.copy()
         self.current_wvn = self.wvnFull.copy()
 
@@ -81,17 +78,18 @@ class P_Mean_Process_UI(QMainWindow):
         self.operations = []
         self.history = []
         self.processing_steps = [
+            "Upload File",
             "SubtractBaseline",
             "SpectralResponseCorrection",
             "CosmicRayRemoval",
             "Truncate",
             "Binning",
             "Denoise",
+            "Polyfit",
             "FluorescenceBackgroundSubtraction",
             "Normalization"
         ]
         self.current_step_index = 0
-
         self.initUI()
         self.add_history("Initial")
 
@@ -133,18 +131,18 @@ class P_Mean_Process_UI(QMainWindow):
         self.label_denoise.setVisible(False)
         self.combo_denoise.setVisible(False)
 
-        # Comparison option: only displayed during FBS step.
-        compare_layout = QHBoxLayout()
-        self.label_compare = QLabel("Generate Comparison Plot:")
-        compare_layout.addWidget(self.label_compare)
-        self.chk_compare = QComboBox()
-        self.chk_compare.addItems(["Yes", "No"])
-        self.chk_compare.setCurrentText("Yes")
-        compare_layout.addWidget(self.chk_compare)
-        layout.addLayout(compare_layout)
-        # Initially, hide the comparison option until reaching FBS step.
-        self.label_compare.setVisible(False)
-        self.chk_compare.setVisible(False)
+        # # Comparison option: only displayed during FBS step.
+        # compare_layout = QHBoxLayout()
+        # self.label_compare = QLabel("Generate Comparison Plot:")
+        # compare_layout.addWidget(self.label_compare)
+        # self.chk_compare = QComboBox()
+        # self.chk_compare.addItems(["Yes", "No"])
+        # self.chk_compare.setCurrentText("Yes")
+        # compare_layout.addWidget(self.chk_compare)
+        # layout.addLayout(compare_layout)
+        # # Initially, hide the comparison option until reaching FBS step.
+        # self.label_compare.setVisible(False)
+        # self.chk_compare.setVisible(False)
 
         # Configuration buttons (Save Config and Load Config)
         config_layout = QHBoxLayout()
@@ -160,6 +158,10 @@ class P_Mean_Process_UI(QMainWindow):
         self.label_saved_file = QLabel("Current File Saved: None")
         layout.addWidget(self.label_saved_file)
 
+        # Current Step Label
+        self.label_current_step = QLabel("Current Step: " + self.processing_steps[self.current_step_index])
+        layout.addWidget(self.label_current_step)
+
         # Next Step label
         self.label_next_step = QLabel("Next Step: " + self.processing_steps[self.current_step_index])
         layout.addWidget(self.label_next_step)
@@ -170,22 +172,31 @@ class P_Mean_Process_UI(QMainWindow):
         history_layout.addWidget(history_label)
         self.history_list = QListWidget()
         history_layout.addWidget(self.history_list)
-        layout.addLayout(history_layout)
+        # layout.addLayout(history_layout)
 
         # Navigation buttons (Previous, Next, Save Figure, Save Data, Load Data Files)
         nav_layout = QHBoxLayout()
-        btn_previous = QPushButton("Previous")
-        btn_previous.clicked.connect(self.on_previous_step)
-        nav_layout.addWidget(btn_previous)
-        btn_next = QPushButton("Next")
-        btn_next.clicked.connect(self.on_next_step)
-        nav_layout.addWidget(btn_next)
-        btn_save_fig = QPushButton("Save Figure")
-        btn_save_fig.clicked.connect(self.on_save_figure)
-        nav_layout.addWidget(btn_save_fig)
-        btn_save_data = QPushButton("Save Data")
-        btn_save_data.clicked.connect(self.on_save_data)
-        nav_layout.addWidget(btn_save_data)
+        self.btn_previous = QPushButton("Previous")
+        self.btn_previous.clicked.connect(self.on_previous_step)
+        self.btn_previous.setVisible(False)
+        nav_layout.addWidget(self.btn_previous)
+
+
+        self.btn_next = QPushButton("Next")
+        self.btn_next.clicked.connect(self.on_next_step)
+        self.btn_next.setVisible(False)
+        nav_layout.addWidget(self.btn_next)
+
+        self.btn_save_fig = QPushButton("Save Figure")
+        self.btn_save_fig.clicked.connect(self.on_save_figure)
+        self.btn_save_fig.setVisible(False)
+        nav_layout.addWidget(self.btn_save_fig)
+
+        self.btn_save_data = QPushButton("Save Data")
+        self.btn_save_data.clicked.connect(self.on_save_data)
+        self.btn_save_data.setVisible(False)
+        nav_layout.addWidget(self.btn_save_data)
+
         btn_load_rdata = QPushButton("Load Data Files")
         btn_load_rdata.clicked.connect(self.on_load_rdata_files)
         nav_layout.addWidget(btn_load_rdata)
@@ -206,14 +217,7 @@ class P_Mean_Process_UI(QMainWindow):
         else:
             self.label_denoise.setVisible(False)
             self.combo_denoise.setVisible(False)
-        # Only show the comparison option when current step is "FluorescenceBackgroundSubtraction"
-        if self.current_step_index < len(self.processing_steps) and \
-           self.processing_steps[self.current_step_index] == "FluorescenceBackgroundSubtraction":
-            self.label_compare.setVisible(True)
-            self.chk_compare.setVisible(True)
-        else:
-            self.label_compare.setVisible(False)
-            self.chk_compare.setVisible(False)
+
 
     def add_history(self, op_name):
         state = {
@@ -285,6 +289,7 @@ class P_Mean_Process_UI(QMainWindow):
         if self.current_step_index > 0:
             self.current_step_index -= 1
         self.update_plot()
+        self.label_current_step.setText("Current Step: " + self.processing_steps[self.current_step_index - 1])
         self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
         self.update_step_ui()
 
@@ -330,6 +335,28 @@ class P_Mean_Process_UI(QMainWindow):
             elif method == "Median Filter":
                 self.current_spect = median_filter(self.current_spect, kernel_size=5)
             self.operations.append(f"Denoise({method})")
+        elif step == 'Polyfit':
+            try:
+                polyorder = int(self.edit_polyorder.text())
+            except ValueError:
+                QMessageBox.warning(self, "Error", "Polyorder must be an integer!")
+                return
+            before = np.copy(self.current_spect)
+            base, finalSpect = FluorescenceBackgroundSubtraction(self.current_spect, polyorder)
+            self.operations.append(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
+            self.current_spect = before
+            # Check if the user wants a comparison plot
+
+            if self.current_wvn is not None and len(self.current_wvn) == len(before):
+                x = self.current_wvn
+            else:
+                x = np.arange(len(before))
+            self.canvas.axes.clear()
+            self.canvas.axes.plot(x, before, label="Spectrum", color="blue", linestyle='-')
+            self.canvas.axes.plot(x, base, label="Polyfit Line", color="red", linestyle='--')
+            self.canvas.axes.set_title("Fluorescence Background Subtraction")
+            self.canvas.axes.legend()
+            self.canvas.draw()
         elif step == "FluorescenceBackgroundSubtraction":
             try:
                 polyorder = int(self.edit_polyorder.text())
@@ -337,24 +364,9 @@ class P_Mean_Process_UI(QMainWindow):
                 QMessageBox.warning(self, "Error", "Polyorder must be an integer!")
                 return
             # Save the current spectrum before processing for comparison
-            before = np.copy(self.current_spect)
             base, finalSpect = FluorescenceBackgroundSubtraction(self.current_spect, polyorder)
             self.operations.append(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
             self.current_spect = finalSpect
-            # Check if the user wants a comparison plot
-            if self.chk_compare.currentText() == "Yes":
-                if self.current_wvn is not None and len(self.current_wvn) == len(before):
-                    x = self.current_wvn
-                else:
-                    x = np.arange(len(before))
-                self.canvas.axes.clear()
-                self.canvas.axes.plot(x, before, label="Before FBS", color="blue", linestyle='-')
-                self.canvas.axes.plot(x, finalSpect, label="After FBS", color="red", linestyle='--')
-                self.canvas.axes.set_title("Fluorescence Background Subtraction")
-                self.canvas.axes.legend()
-                self.canvas.draw()
-            else:
-                self.update_plot()
         elif step == "Normalization":
             self.current_spect = Normalize(self.current_spect)
             self.operations.append("Normalization")
@@ -365,11 +377,12 @@ class P_Mean_Process_UI(QMainWindow):
         self.add_history(step)
         self.current_step_index += 1
         if self.current_step_index < len(self.processing_steps):
+            self.label_current_step.setText("Current Step: " + self.processing_steps[self.current_step_index - 1])
             self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
         else:
             self.label_next_step.setText("Processing Complete")
         # Only call update_plot if the step did not already update the canvas (e.g., FBS step)
-        if step != "FluorescenceBackgroundSubtraction":
+        if step != "Polyfit":
             self.update_plot()
         self.update_step_ui()
 
@@ -396,12 +409,20 @@ class P_Mean_Process_UI(QMainWindow):
             QMessageBox.warning(self, "Error", f"Failed to save data: {e}")
 
     def on_load_rdata_files(self):
-        data_file, _ = QFileDialog.getOpenFileName(self, "Select Lipid FP Data", "",
-                                                   "Text Files (*.txt);;All Files (*)")
+        data_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Spectrum Measurement Data",
+            "",
+            "Data Files (*.txt *.csv *.xlsx);;Text Files (*.txt);;CSV Files (*.csv);;Excel Files (*.xlsx);;All Files (*)"
+        )
         if not data_file:
             return
-        wlcorr_file, _ = QFileDialog.getOpenFileName(self, "Select WL Correction Data", "",
-                                                     "Text Files (*.txt);;All Files (*)")
+        wlcorr_file, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Whitelight Correction Data",
+            "",
+            "Data Files (*.txt *.csv *.xlsx);;Text Files (*.txt);;CSV Files (*.csv);;Excel Files (*.xlsx);;All Files (*)"
+        )
         if not wlcorr_file:
             return
         wvn_file, _ = QFileDialog.getOpenFileName(self, "Select Calibration File", "",
@@ -410,14 +431,19 @@ class P_Mean_Process_UI(QMainWindow):
             return
 
         try:
-            data_df = rdata.read_txt_file(data_file, delimiter=',', header=None)
+            # data_df = rdata.read_txt_file(data_file, delimiter=',', header=None)
+            # self.current_spect = data_df.iloc[:, 1:].mean(axis=1).to_numpy().astype(np.float64)
+
+
+            data_df = rdata.load_spectrum_data(data_file)
+            self.current_spect = data_df.flatten().astype(np.float64)
             if data_df is None:
                 QMessageBox.warning(self, "Error", "Can't read data file")
                 return
-            if data_df.shape[1] < 2:
-                QMessageBox.warning(self, "Error", "Data file format error, must have at least 2 columns.")
-                return
-            self.current_spect = data_df.iloc[:, 1:].mean(axis=1).to_numpy().astype(np.float64)
+
+
+            print(self.current_spect)
+
 
             wl_corr = rdata.read_txt_file(wlcorr_file)
             if wl_corr is None:
@@ -432,7 +458,12 @@ class P_Mean_Process_UI(QMainWindow):
             self.history = []
             self.history_list.clear()
             self.operations = []
-            self.current_step_index = 0
+            self.current_step_index = 1
+
+            self.btn_previous.setVisible(True)
+            self.btn_next.setVisible(True)
+            self.btn_save_data.setVisible(True)
+            self.btn_save_fig.setVisible(True)
 
             self.operations.append("LoadData")
             self.add_history("LoadData")
