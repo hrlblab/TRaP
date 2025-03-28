@@ -14,7 +14,7 @@ APP_ID = 'com.yourcompany.yourapp.1.0'
 
 class SplashScreen(QSplashScreen):
     def __init__(self, pixmap):
-        pixmap = QPixmap(":/resources/loading.png")
+        pixmap = QPixmap("resources/loading.png")
         super().__init__(pixmap, Qt.WindowStaysOnTopHint)
         self.progress = 0
         self.message = "Starting application..."
