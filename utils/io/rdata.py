@@ -47,32 +47,41 @@ def getwvnfrompath(path):
 
 def load_spectrum_data(filepath):
     try:
-        # Try reading with header=None first
-        df = pd.read_csv(filepath, header=None)
-    except Exception:
-        # Retry with default header if header=None fails
-        df = pd.read_csv(filepath)
+        if filepath.endswith('.xlsx'):
+            df = pd.read_excel(filepath, header=None)
+        else:
+            # Step 1: read first line
+            with open(filepath, 'r', encoding='utf-8') as f:
+                first_line = f.readline()
 
-    # Handle 1D case: single line
-    if df.shape[0] == 1:  # one row, many columns → make it a column vector
+            # Step 2: detect delimiter
+            if ',' in first_line:
+                delimiter = ','
+            elif '\t' in first_line:
+                delimiter = '\t'
+            else:
+                delimiter = r'\s+'  # regex for whitespace
 
-        data = df.values.flatten().reshape(-1, 1).astype(np.float64)
-        return data
+            # Step 3: read file accordingly
+            if delimiter == r'\s+':
+                df = pd.read_csv(filepath, sep=delimiter, header=None, engine='python')
+            else:
+                df = pd.read_csv(filepath, sep=delimiter, header=None)
 
-    # Handle single column file
-    if df.shape[1] == 1:  # one column
-        data = df.iloc[:, 0].to_numpy().reshape(-1, 1).astype(np.float64)
-        return data
+        # Step 4: Format check
+        if df.shape[0] == 1 and df.shape[1] > 1:
+            return df.values.flatten().reshape(-1, 1).astype(np.float64)
 
-    # Handle two columns with header
-    if df.shape[1] == 2 and not np.issubdtype(df.iloc[0, 1], np.number):
-        # Try re-reading and skipping header row
-        df = pd.read_csv(filepath, skiprows=1, header=None)
+        if df.shape[1] == 1:
+            return df.iloc[:, 0].to_numpy().reshape(-1, 1).astype(np.float64)
+
         if df.shape[1] == 2:
-            data = df.iloc[:, 1].to_numpy().reshape(-1, 1).astype(np.float64)
-            return data
+            first_row = df.iloc[0, 0]
+            if isinstance(first_row, str) and first_row.startswith("#"):
+                df = pd.read_csv(filepath, sep=delimiter, header=None, skiprows=1)
+            return df.iloc[:, 1].to_numpy().reshape(-1, 1).astype(np.float64)
 
-    # Handle multi-column: average from second column
-    if df.shape[1] > 1:
-        data = df.iloc[:, 1:].mean(axis=1).to_numpy().reshape(-1, 1).astype(np.float64)
-        return data
+        return df.iloc[:, 1:].mean(axis=1).to_numpy().reshape(-1, 1).astype(np.float64)
+
+    except Exception as e:
+        raise ValueError(f"Failed to read spectrum file: {e}")
