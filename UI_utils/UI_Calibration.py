@@ -1,7 +1,5 @@
 import sys
-import os
 import numpy as np
-import matplotlib.pyplot as mpimg
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton,
                              QLineEdit, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox,
                              QListWidget)

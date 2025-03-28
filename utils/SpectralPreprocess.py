@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-from scipy.io import loadmat
 from scipy.signal import savgol_filter
 from scipy.optimize import curve_fit
 

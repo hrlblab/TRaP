@@ -1,10 +1,8 @@
 import sys
 import os
 import json
-from datetime import datetime
 
 import numpy as np
-import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton,
                              QVBoxLayout, QFileDialog, QMessageBox, QHBoxLayout, QListWidget)
 from utils.io import wdata, rdata
