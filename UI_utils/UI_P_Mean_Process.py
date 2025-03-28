@@ -354,7 +354,7 @@ class P_Mean_Process_UI(QMainWindow):
             self.canvas.axes.clear()
             self.canvas.axes.plot(x, before, label="Spectrum", color="blue", linestyle='-')
             self.canvas.axes.plot(x, base, label="Polyfit Line", color="red", linestyle='--')
-            self.canvas.axes.set_title("Fluorescence Background Subtraction")
+            self.canvas.axes.set_title("Polyfit Overview")
             self.canvas.axes.legend()
             self.canvas.draw()
         elif step == "FluorescenceBackgroundSubtraction":
