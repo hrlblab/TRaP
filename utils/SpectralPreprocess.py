@@ -45,7 +45,6 @@ def Truncate(start, stop, wvnFull, sprSpect):
 
 def Binning(start, stop, wvn, truncSpect, binwidth=3.5):
     binWvn = np.arange(start, stop, binwidth, dtype=np.float64)
-    # 计算每个箱的中心作为新波长
     newWvn = (binWvn[:-1] + binWvn[1:]) / 2.0
     binSpect = np.zeros(len(newWvn), dtype=np.float64)
     for k in range(len(newWvn)):
