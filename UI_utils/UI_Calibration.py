@@ -5,6 +5,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushBu
                              QListWidget)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from UI_utils.UI_Config_Manager import ConfigManager
+from utils.Calibration import SpectrumCalibration
 
 class WaveformCanvas(FigureCanvas):
     def __init__(self, parent=None, width=7, height=4, dpi=100):
@@ -34,6 +36,7 @@ class WaveformCanvas(FigureCanvas):
             self.ax.set_title("Waveform Plot")
             self.ax.legend()
             self.draw()
+            return data
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to load waveform:\n{e}")
 
@@ -65,6 +68,7 @@ class WaveformSelectionUI(QMainWindow):
         self.waveform2_points = []
         self.current_waveform = None  # 1 for waveform1, 2 for waveform2.
         self.initUI()
+        self.wavenumbers = None  # Will hold 1D array of wavenumbers
 
     def initUI(self):
         central_widget = QWidget()
@@ -133,7 +137,8 @@ class WaveformSelectionUI(QMainWindow):
     def load_waveform1(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Load Waveform 1", "", "Text Files (*.txt);;All Files (*)")
         if fileName:
-            self.canvas.load_waveform(fileName)
+            data = self.canvas.load_waveform(fileName)
+            self.wavenumbers = data
             self.current_waveform = 1
             self.label_current.setText("Current Waveform: 1")
             self.set_max_points_for_current_waveform()
@@ -181,6 +186,9 @@ class WaveformSelectionUI(QMainWindow):
         msg = f"Waveform 1 Selected Points:\n{self.waveform1_points}\n\nWaveform 2 Selected Points:\n{self.waveform2_points}"
         QMessageBox.information(self, "Next Step Processing", msg)
         # You can expand the data processing logic here.
+
+
+
 
 # if __name__ == "__main__":
 #     app = QApplication(sys.argv)

@@ -4,12 +4,12 @@ from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QLabel, QPushButton, QLineEdit, QCheckBox, \
     QVBoxLayout, QFileDialog, QMessageBox, QHBoxLayout, QComboBox
 
-from UI_utils.UI_Config_Manager import ConfigManagerUI
+from UI_utils.UI_Config_Manager import ConfigManagerUI, ConfigManager
 from UI_utils.UI_P_Mean_Process import P_Mean_Process_UI
 from UI_utils.UI_P_Mean_Batch_Process import BatchPMeanUI
 from UI_utils.UI_Calibration import WaveformSelectionUI
 LOGO_ADDR = 'vanderbilt_biophotonics_center_logo.jpg'
-
+config = ConfigManager()
 
 class MainWindow(QWidget):
     def __init__(self):
@@ -41,6 +41,10 @@ class MainWindow(QWidget):
             self.layout.addWidget(button)
             self.buttons.append(button)
 
+            if title == "Calibration":
+                self.calibration_button = button
+                self.calibration_button.setEnabled(False)
+
         self.setLayout(self.layout)
 
     def open_window(self, title):
@@ -48,13 +52,19 @@ class MainWindow(QWidget):
             new_window = P_Mean_Process_UI()
         elif title == 'Config Manager':
             new_window = ConfigManagerUI()
+            new_window.config_updated.connect(self.check_calibration_state)
         elif title == 'Spectrum Batch Process':
             new_window = BatchPMeanUI()
         elif title == 'Calibration':
             new_window = WaveformSelectionUI()
 
+
         self.opened_windows.append(new_window)
         new_window.show()
+
+    def check_calibration_state(self):
+        x_axis_calib = config.params.get("X-axis Calibration", False)
+        self.calibration_button.setEnabled(x_axis_calib)
 
     def closeEvent(self, a0, QCloseEvent=None):
         for window in self.opened_windows:

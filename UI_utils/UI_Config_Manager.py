@@ -3,7 +3,7 @@ import os
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QGridLayout, QWidget, QLabel, QPushButton, QLineEdit, QCheckBox, \
     QVBoxLayout, QFileDialog, QMessageBox, QHBoxLayout, QComboBox
-
+from PyQt5.QtCore import pyqtSignal
 
 class ConfigManager:
     _instance = None
@@ -34,6 +34,7 @@ class ConfigManager:
             try:
                 with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
                     self.params.update(json.load(f))
+
             except Exception as e:
                 print(f"Failed to load config: {e}")
 
@@ -52,6 +53,7 @@ class ConfigManager:
 
 
 class ConfigManagerUI(QWidget):
+    config_updated = pyqtSignal()
     def __init__(self):
         super().__init__()
         self.config = ConfigManager()  # **Config Manager**
@@ -259,6 +261,7 @@ class ConfigManagerUI(QWidget):
                 with open(file_name, 'w', encoding='utf-8') as f:
                     json.dump(self.config.params, f, ensure_ascii=False, indent=4)
                 QMessageBox.information(self, "Success", f"Configuration saved to {file_name}")
+                self.config_updated.emit()
             except Exception as e:
                 QMessageBox.critical(self, "Save Failed", f"Failed to save configuration:\n{e}")
         else:
@@ -271,6 +274,7 @@ class ConfigManagerUI(QWidget):
         if file_name:
             self.config.CONFIG_FILE = file_name
             self.config.load_config()
+            self.config_updated.emit()
             # 更新 UI 中的各个控件
             for param, input_field in self.inputs.items():
                 if isinstance(input_field, QComboBox):
