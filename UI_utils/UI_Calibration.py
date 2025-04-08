@@ -1,42 +1,61 @@
+# main.py
 import sys
 import numpy as np
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton,
-                             QLineEdit, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox,
-                             QListWidget)
+import pandas as pd
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QLabel, QPushButton, QLineEdit,
+    QVBoxLayout, QFileDialog, QMessageBox, QListWidget, QInputDialog, QProgressBar
+)
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from UI_utils.UI_Config_Manager import ConfigManager
-from utils.Calibration import SpectrumCalibration
+from scipy.io import savemat
+
+from utils.XAxisCaliibratiion import XAxisCalibration  # 你自己的模块路径
+
+
+def load_1col_file(filepath):
+    ext = filepath.lower().split('.')[-1]
+    if ext in ['txt', 'csv']:
+        data = np.loadtxt(filepath)
+    elif ext in ['xls', 'xlsx']:
+        df = pd.read_excel(filepath, header=None)
+        data = df.values.squeeze()
+    else:
+        raise ValueError("Unsupported file format")
+    if data.ndim != 1:
+        raise ValueError("File must contain one column")
+    return data
+
 
 class WaveformCanvas(FigureCanvas):
     def __init__(self, parent=None, width=7, height=4, dpi=100):
-        self.fig = Figure(figsize=(width, height), dpi=dpi)  # Create a Figure object
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
         self.ax = self.fig.add_subplot(111)
         super().__init__(self.fig)
         self.setParent(parent)
-        self.selected_points = []  # Stores selected points as (index, value)
-        self.max_points = 0        # Maximum allowed points to select
-        self.data = None           # (x, y) data tuple
+        self.selected_points = []
+        self.max_points = 0
+        self.data = None
         self.mpl_connect('button_press_event', self.on_click)
 
     def load_waveform(self, filepath):
         try:
-            data = np.loadtxt(filepath)
+            data = load_1col_file(filepath)
             if data.ndim == 1:
                 x = np.arange(len(data))
                 y = data
             else:
-                # If two columns exist, use the first column as x and second as y.
                 x = data[:, 0]
                 y = data[:, 1]
             self.data = (x, y)
-            self.selected_points = []  # Clear previously selected points
+            self.selected_points = []
             self.ax.clear()
             self.ax.plot(x, y, label="Waveform")
-            self.ax.set_title("Waveform Plot")
+            self.ax.set_title(f"Waveform Plot")
             self.ax.legend()
             self.draw()
-            return data
+            self.show()
+            QApplication.processEvents()
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to load waveform:\n{e}")
 
@@ -44,154 +63,245 @@ class WaveformCanvas(FigureCanvas):
         self.max_points = max_points
 
     def on_click(self, event):
-        # If click is not inside the axes or no data is loaded, ignore.
         if event.inaxes != self.ax or self.data is None:
             return
         if len(self.selected_points) >= self.max_points:
             QMessageBox.information(self, "Selection", "Maximum number of points selected.")
             return
-        # For 1D data, x-axis is the index; round event.xdata to nearest integer.
         x_clicked = int(round(event.xdata))
         y_clicked = event.ydata
         self.selected_points.append((x_clicked, y_clicked))
-        # Plot the selected point as a red circle.
         self.ax.plot(x_clicked, y_clicked, marker='o', color='red')
         self.draw()
+
 
 class WaveformSelectionUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Waveform Point Selection")
-        self.setGeometry(100, 100, 800, 600)
-        # Stores selected points for each waveform.
+        self.setWindowTitle("Spectral Calibration Workflow")
+        self.setGeometry(100, 100, 900, 700)
+
+        self.step = 1
+        self.lambda_known = False
+        self.lambda_value_array = None
         self.waveform1_points = []
         self.waveform2_points = []
-        self.current_waveform = None  # 1 for waveform1, 2 for waveform2.
+        self.neon_spectrum = None
+        self.acet_spectrum = None
+
         self.initUI()
-        self.wavenumbers = None  # Will hold 1D array of wavenumbers
 
     def initUI(self):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
+        self.layout = QVBoxLayout(central_widget)
 
-        # Two input boxes for setting max points for each waveform.
-        max_layout = QHBoxLayout()
-        self.label_max_wf1 = QLabel("Max Points for Waveform 1:")
-        max_layout.addWidget(self.label_max_wf1)
-        self.edit_max_wf1 = QLineEdit("5")
-        max_layout.addWidget(self.edit_max_wf1)
-        self.label_max_wf2 = QLabel("Max Points for Waveform 2:")
-        max_layout.addWidget(self.label_max_wf2)
-        self.edit_max_wf2 = QLineEdit("5")
-        max_layout.addWidget(self.edit_max_wf2)
-        main_layout.addLayout(max_layout)
+        self.label_step = QLabel("Step 1: Upload Neon spectrum")
+        self.layout.addWidget(self.label_step)
 
-        # Buttons to load Waveform 1 and Waveform 2
-        btn_layout = QHBoxLayout()
-        self.btn_load_wf1 = QPushButton("Load Waveform 1")
-        self.btn_load_wf1.clicked.connect(self.load_waveform1)
-        btn_layout.addWidget(self.btn_load_wf1)
-        self.btn_load_wf2 = QPushButton("Load Waveform 2")
-        self.btn_load_wf2.clicked.connect(self.load_waveform2)
-        btn_layout.addWidget(self.btn_load_wf2)
-        main_layout.addLayout(btn_layout)
+        self.btn_upload_neon = QPushButton("Upload Neon Spectrum")
+        self.btn_upload_neon.clicked.connect(self.upload_neon)
+        self.layout.addWidget(self.btn_upload_neon)
 
-        # Label to show which waveform is currently loaded.
-        self.label_current = QLabel("No waveform loaded")
-        main_layout.addWidget(self.label_current)
+        self.input_neon_points = QLineEdit()
+        self.input_neon_points.setPlaceholderText("Enter number of Neon peaks to select")
+        self.layout.addWidget(self.input_neon_points)
 
-        # Matplotlib canvas for displaying the waveform.
+        self.label_current = QLabel("No spectrum loaded")
+        self.layout.addWidget(self.label_current)
+
         self.canvas = WaveformCanvas(self, width=7, height=5, dpi=100)
-        main_layout.addWidget(self.canvas)
+        self.layout.addWidget(self.canvas)
 
-        # List widget to display the selected points.
         self.list_points = QListWidget()
-        main_layout.addWidget(self.list_points)
+        self.layout.addWidget(self.list_points)
 
-        # Action buttons: Clear, Record, and Next Step Processing.
-        action_layout = QHBoxLayout()
-        self.btn_clear = QPushButton("Clear Selections")
-        self.btn_clear.clicked.connect(self.clear_selections)
-        action_layout.addWidget(self.btn_clear)
-        self.btn_record = QPushButton("Record Selections")
-        self.btn_record.clicked.connect(self.record_selections)
-        action_layout.addWidget(self.btn_record)
-        self.btn_next = QPushButton("Next Step Processing")
-        self.btn_next.clicked.connect(self.next_step_processing)
-        action_layout.addWidget(self.btn_next)
-        main_layout.addLayout(action_layout)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        self.layout.addWidget(self.progress_bar)
 
-    def set_max_points_for_current_waveform(self):
-        try:
-            if self.current_waveform == 1:
-                max_points = int(self.edit_max_wf1.text())
-            elif self.current_waveform == 2:
-                max_points = int(self.edit_max_wf2.text())
-            else:
-                return
-            self.canvas.set_max_points(max_points)
-        except ValueError:
-            QMessageBox.warning(self, "Error", "Max points must be an integer.")
+        self.btn_continue = QPushButton("Continue")
+        self.btn_continue.clicked.connect(self.next_step)
+        self.layout.addWidget(self.btn_continue)
 
-    def load_waveform1(self):
-        fileName, _ = QFileDialog.getOpenFileName(self, "Load Waveform 1", "", "Text Files (*.txt);;All Files (*)")
-        if fileName:
-            data = self.canvas.load_waveform(fileName)
-            self.wavenumbers = data
-            self.current_waveform = 1
-            self.label_current.setText("Current Waveform: 1")
-            self.set_max_points_for_current_waveform()
-            self.list_points.clear()
+        self.btn_back = QPushButton("Back")
+        self.btn_back.clicked.connect(self.prev_step)
+        self.layout.addWidget(self.btn_back)
 
-    def load_waveform2(self):
-        fileName, _ = QFileDialog.getOpenFileName(self, "Load Waveform 2", "", "Text Files (*.txt);;All Files (*)")
+        self.btn_process = QPushButton("Process and Save")
+        self.btn_process.clicked.connect(self.process_and_save)
+        self.btn_process.hide()
+        self.layout.addWidget(self.btn_process)
+
+        self.update_step_ui()
+
+    def update_step_ui(self):
+        self.btn_upload_neon.hide()
+        self.input_neon_points.hide()
+        self.canvas.hide()
+        self.list_points.hide()
+        self.label_current.hide()
+        self.progress_bar.setVisible(False)
+        self.btn_process.hide()
+
+        if self.step == 1:
+            self.btn_upload_neon.show()
+            self.input_neon_points.show()
+            self.label_step.setText("Step 1: Upload Neon spectrum and enter peak count")
+        elif self.step == 2:
+            self.canvas.show()
+            self.label_current.show()
+            self.label_step.setText("Step 2: Select Neon peak points")
+        elif self.step == 3:
+            self.label_step.setText("Step 3: Do you know the laser wavelength?")
+        elif self.step == 3.6:
+            self.canvas.show()
+            self.label_current.show()
+            self.label_step.setText("Step 3a: Select Acet peak points")
+        elif self.step == 4:
+            self.label_step.setText("Step 4: Ready to calibrate and save")
+            self.btn_process.show()
+            self.canvas.show()
+            self.label_current.show()
+            self.btn_continue.setText("Finish")
+            self.btn_continue.show()
+
+    def upload_neon(self):
+        if self.step != 1:
+            return
+        fileName, _ = QFileDialog.getOpenFileName(self, "Select Neon Spectrum", "", "Supported Files (*.txt *.csv *.xlsx)")
         if fileName:
             self.canvas.load_waveform(fileName)
-            self.current_waveform = 2
-            self.label_current.setText("Current Waveform: 2")
-            self.set_max_points_for_current_waveform()
+            self.neon_spectrum = self.canvas.data[1]
+            self.label_current.setText(f"Loaded: {fileName.split('/')[-1]}")
             self.list_points.clear()
 
-    def clear_selections(self):
-        self.canvas.selected_points = []
-        if self.canvas.data is not None:
-            x, y = self.canvas.data
-            self.canvas.ax.clear()
-            self.canvas.ax.plot(x, y, label="Waveform")
-            self.canvas.ax.set_title("Waveform Plot")
-            self.canvas.ax.legend()
-            self.canvas.draw()
-        self.list_points.clear()
+    def next_step(self):
+        if self.step == 1:
+            try:
+                max_pts = int(self.input_neon_points.text())
+                self.canvas.set_max_points(max_pts)
+            except ValueError:
+                QMessageBox.warning(self, "Input Error", "Please enter a valid integer for peak number.")
+                return
+            if not self.canvas.data:
+                QMessageBox.warning(self, "Error", "Please upload the Neon spectrum first.")
+                return
+            self.step = 2
+        elif self.step == 2:
+            if not self.canvas.selected_points:
+                QMessageBox.warning(self, "No Points", "Please select at least one peak.")
+                return
+            self.waveform1_points = self.canvas.selected_points.copy()
+            self.list_points.addItem("Neon selected points:")
+            for p in self.waveform1_points:
+                self.list_points.addItem(str(p))
+            self.step = 3
+            self.ask_lambda_known()
+        elif self.step == 3.6:
+            if not self.canvas.selected_points:
+                QMessageBox.warning(self, "No Points", "Please select acet peaks.")
+                return
+            self.waveform2_points = self.canvas.selected_points.copy()
+            self.list_points.addItem("Acet selected points:")
+            for p in self.waveform2_points:
+                self.list_points.addItem(str(p))
+            self.step = 4
+        elif self.step == 4 and self.btn_continue.text() == "Finish":
+            self.close()
+            QApplication.quit()
+        self.update_step_ui()
 
-    def record_selections(self):
-        pts = self.canvas.selected_points.copy()
-        if self.current_waveform == 1:
-            self.waveform1_points = pts
-            self.list_points.addItem("Waveform 1 Selected Points:")
-            for p in pts:
-                self.list_points.addItem(str(p))
-        elif self.current_waveform == 2:
-            self.waveform2_points = pts
-            self.list_points.addItem("Waveform 2 Selected Points:")
-            for p in pts:
-                self.list_points.addItem(str(p))
+    def prev_step(self):
+        if self.step > 1:
+            self.step -= 1
+            self.update_step_ui()
+
+    def ask_lambda_known(self):
+        reply = QMessageBox.question(
+            self, "Laser Wavelength", "Do you know the laser wavelength (as a file with λ values)?",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.lambda_known = True
+            self.get_lambda_file()
         else:
-            QMessageBox.warning(self, "Error", "No waveform loaded.")
+            self.lambda_known = False
+            self.step = 3.5
+            self.prepare_acet_step()
+        self.update_step_ui()
 
-    def next_step_processing(self):
-        if not self.waveform1_points or not self.waveform2_points:
-            QMessageBox.warning(self, "Error", "Please record points for both waveforms first!")
-            return
-        msg = f"Waveform 1 Selected Points:\n{self.waveform1_points}\n\nWaveform 2 Selected Points:\n{self.waveform2_points}"
-        QMessageBox.information(self, "Next Step Processing", msg)
-        # You can expand the data processing logic here.
+    def get_lambda_file(self):
+        fileName, _ = QFileDialog.getOpenFileName(self, "Select Lambda File", "", "Supported Files (*.txt *.csv *.xlsx)")
+        if fileName:
+            try:
+                self.lambda_value_array = load_1col_file(fileName)
+                QMessageBox.information(self, "Success", f"{len(self.lambda_value_array)} lambda values loaded.")
+                self.step = 4
+                self.update_step_ui()
+            except Exception as e:
+                QMessageBox.warning(self, "Error", str(e))
+
+    def prepare_acet_step(self):
+        fileName, _ = QFileDialog.getOpenFileName(self, "Select Acet Spectrum", "", "Supported Files (*.txt *.csv *.xlsx)")
+        if fileName:
+            self.canvas.load_waveform(fileName)
+            self.acet_spectrum = self.canvas.data[1]
+            self.label_current.setText(f"Loaded: {fileName.split('/')[-1]}")
+            try:
+                pts_str, ok = QInputDialog.getText(self, "Acet Peak Number", "Enter number of acet peaks:")
+                if not ok:
+                    return
+                max_pts = int(pts_str)
+                self.canvas.set_max_points(max_pts)
+                self.step = 3.6
+                self.update_step_ui()
+            except ValueError:
+                QMessageBox.warning(self, "Format Error", "Please enter a valid number.")
+
+    def process_and_save(self):
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(10)
+        QApplication.processEvents()
+
+        cal = XAxisCalibration()
+        cal.choose_neon_library('neon')
+        neon_x = np.array([p[0] for p in self.waveform1_points])
+        neon_y = np.array([p[1] for p in self.waveform1_points])
+
+        if self.lambda_known:
+            cal.peak_num(near_num=len(neon_x), acet_num=0)
+            cal.nearX = np.arange(len(neon_x))
+            Wvn = cal.Calibration_without_acetSpec(neon_x, neon_y, self.neon_spectrum, self.lambda_value_array)
+        else:
+            acet_x = np.array([p[0] for p in self.waveform2_points])
+            acet_y = np.array([p[1] for p in self.waveform2_points])
+            cal.peak_num(near_num=len(neon_x), acet_num=len(acet_x))
+            cal.nearX = np.arange(len(neon_x))
+            cal.acetX = np.arange(len(acet_x))
+            Wvn = cal.Calibration_with_acetSpec(neon_x, neon_y, self.neon_spectrum, acet_x, acet_y, self.acet_spectrum)
+
+        self.progress_bar.setValue(80)
+        QApplication.processEvents()
+
+        save_path, _ = QFileDialog.getSaveFileName(self, "Save Calibrated Result", "", "MAT files (*.mat)")
+        if save_path:
+            if not save_path.endswith(".mat"):
+                save_path += ".mat"
+            savemat(save_path, {'Cal': {'Wvn': Wvn}})
+            self.progress_bar.setValue(100)
+
+            summary = f"""
+            Calibration Completed!
+            Used Neon peaks: {len(neon_x)}
+            {"Used Acet peaks: " + str(len(cal.acetX)) if not self.lambda_known else "Used external lambda file"}
+            Average λ: {np.mean(self.lambda_value_array):.2f} nm
+            """
+            QMessageBox.information(self, "Summary", summary.strip())
 
 
-
-
-# if __name__ == "__main__":
-#     app = QApplication(sys.argv)
-#     window = WaveformSelectionUI()
-#     window.show()
-#     sys.exit(app.exec_())
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = WaveformSelectionUI()
+    window.show()
+    sys.exit(app.exec_())

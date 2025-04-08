@@ -9,7 +9,8 @@ from utils.io import wdata, rdata
 from utils.SpectralPreprocess import (Binning, Denoise, Truncate, CosmicRayRemoval,
                                       SpectralResponseCorrection, subtractBaseline,
                                       FluorescenceBackgroundSubtraction)
-
+from UI_utils.UI_Config_Manager import ConfigManager
+config_manager = ConfigManager()
 
 # Function to load configuration from p_mean_config.json
 def load_config(config_file="p_mean_config.json"):

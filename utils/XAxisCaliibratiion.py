@@ -15,10 +15,18 @@ class XAxisCalibration:
         self.neon_xdata = None
         self.neon_ydata = None
         self.neon_spectrum = None
+        self.acet_xdata = None
+        self.acet_ydata = None
+        self.acet_spectrum = None
         self.neon_argon_library = None
         self.acetaminophen_library = None
         self.channel_neon = None
+        self.channel_acet = None
         self.P_neon = None
+        self.near_num = None  # Neon‐Argon
+        self.acet_num = None  # Acetaminophen
+        self.nearX = None
+        self.acetX = None
 
     def choose_neon_library(self, config):
         # if config == 'neon':
@@ -39,7 +47,11 @@ class XAxisCalibration:
             651.6, 465.1, 390.9, 329.2, 213.3
         ])
 
+    def peak_num(self, near_num, acet_num):
+        self.near_num = near_num
+        self.acet_num = acet_num
 
+    @staticmethod
     def construct_kernel(peak_positions, peak_heights):
         """
         Construct kernel function: Assign peak heights at selected positions,
@@ -255,3 +267,186 @@ class XAxisCalibration:
         return channel
 
     def process_acet(self, xdata, ydata, acet_spectrum):
+        self.acet_xdata = xdata
+        self.acet_ydata = ydata
+        self.acet_spectrum = acet_spectrum
+
+        baseline_vals = self.baseline(self.acet_spectrum)
+        spectrum_corr = self.acet_spectrum - baseline_vals
+        norm_spec = self.normalize(spectrum_corr)
+
+
+        channel = {}
+        channel['New_pos_Ker'] = self.acet_xdata
+        channel['New_hgts_Ker_int'] = self.acet_ydata
+        kernel = self.construct_kernel(self.acet_xdata, self.acet_ydata)
+        channel['Kernel'] = kernel
+
+        # 3. Cross-correlation alignment
+        norm_spec = norm_spec.flatten()
+        kernel = kernel.flatten()
+        corr, start = self.cross_correlation_alignment(norm_spec, kernel)
+        channel['correlation'] = corr
+        channel['start'] = start
+
+        # 4. Peak detection with threshold iteration
+        channel['threshold'] = 0.001
+        channel['w2'] = 4
+        channel['iterLim'] = int(2e5)
+        channel['newPeakLim'] = self.acet_num
+        spectrum_size = len(norm_spec)
+        d = np.zeros(spectrum_size, dtype=int)
+        max_iterations = channel['iterLim']
+        count = 0
+        while count < max_iterations:
+            d = np.zeros(spectrum_size, dtype=int)
+            for ii in range(channel['w2'], spectrum_size - channel['w2']):
+                window_vals = norm_spec[ii - channel['w2']: ii + channel['w2'] + 1]
+                if norm_spec[ii] == np.max(window_vals) and norm_spec[ii] >= channel['threshold']:
+                    d[ii] = ii
+            detected = np.nonzero(d)[0]
+            if len(detected) > 0:
+                unique_detected = detected[np.insert(np.diff(detected) > 1, 0, True)]
+            else:
+                unique_detected = detected
+            reduced = np.vstack((unique_detected, norm_spec[unique_detected])).T
+            low_idx = np.argmax(reduced[:, 0] > start) + 1
+            end_value = start + (self.acet_xdata[-1] - self.acet_xdata[0]) if len(self.acet_xdata) > 0 else start
+            high_idx = np.argmax(reduced[:, 0] >= end_value) + 1
+            New = reduced[low_idx - 1: high_idx]
+            if len(New) > channel['newPeakLim']:
+                channel['threshold'] += 0.0001
+            else:
+                break
+            count += 1
+        if count >= max_iterations:
+            print("Acetaminophen: Maximum iterations reached")
+        channel['New'] = New
+
+        # 5. Filtering and subpixel calculation
+        y = norm_spec.reshape(1, -1)
+        z, _ = savgol_filter(y, 5, 1, 1)
+        channel['z'] = z
+        spans, _ = self.compute_peak_span(norm_spec, unique_detected, sg_window=5, polyorder=1)
+        subpixel_peaks = self.compute_subpixel_peaks(norm_spec, unique_detected, spans)
+        channel['subpixel'] = subpixel_peaks
+
+        # 6. Calibration using Neon-Argon polynomial
+        acet_wavenumbers = self.acetaminophen_library[self.acetX]
+        newfitpks = np.column_stack((subpixel_peaks[low_idx - 1:high_idx], acet_wavenumbers[:]))
+        channel['newfitpks'] = newfitpks
+        P = self.P_neon
+        fitted, _ = lsqpolyval(P, newfitpks[:, 0])
+        error = (1e7 / 785) - fitted - newfitpks[:, 1]
+
+        # Secondary threshold iteration
+        if channel['threshold'] != 0.01:
+            channel['threshold'] = 0.01
+            d = np.zeros(len(spectrum_corr), dtype=int)
+            for ii in range(channel['w2'], len(spectrum_corr) - channel['w2']):
+                if np.max(norm_spec[ii - channel['w2']:ii + channel['w2'] + 1]) == norm_spec[ii] and \
+                        norm_spec[ii] >= channel['threshold']:
+                    d[ii] = ii
+            d = d[d != 0]
+            y = norm_spec[:, np.newaxis].T
+            z, _ = savgol_filter(y, 5, 1, 1)
+            spans = np.zeros(len(d))
+            for jj, peak_idx in enumerate(d):
+                k = peak_idx
+                while z[0][k] - z[0][k - 1] < 0 and k > 0:
+                    k -= 1
+                kleft = k
+                k = peak_idx
+                while k < len(z[0]) - 1 and z[0][k] - z[0][k + 1] > 0:
+                    k += 1
+                kright = k
+                spans[jj] = kright - kleft
+            spectrum_corr = norm_spec.copy()
+            d = d + 1  # Convert to 1-based indexing
+            subpixel_peaks = accuratepeak2(np.arange(1, len(spectrum_corr) + 1), self.acet_spectrum, d, spans)
+
+        # Post-processing
+        for ii in range(len(subpixel_peaks)):
+            for jj in range(len(newfitpks[:, 0])):
+                if subpixel_peaks[ii] == newfitpks[jj, 0]:
+                    subpixel_peaks[ii] = 1e6
+                    subpixel_peaks = np.sort(subpixel_peaks)
+
+        # Update reference library
+        for ii in range(len(self.neon_argon_library)):
+            for jj in range(len(newfitpks[:, 1])):
+                if self.neon_argon_library[ii] == newfitpks[jj, 1]:
+                    self.neon_argon_library[ii] = 1e6
+        self.neon_argon_library = np.sort(self.neon_argon_library)
+
+        # Filter invalid peaks
+        exclude = (subpixel_peaks > len(norm_spec)) & (subpixel_peaks < 1e6)
+        subpixel_peaks = subpixel_peaks[~exclude]
+
+        # Sort peaks by intensity
+        sorted_indices = np.argsort(
+            -norm_spec[np.floor(subpixel_peaks[subpixel_peaks < 1e6]).astype(int)])
+
+        # Error processing
+        lmbda = np.zeros(len(newfitpks[:, 0]))
+        for kk in range(len(newfitpks[:, 0])):
+            lmbda[kk] = 1e7 / (fitted[0, kk] + newfitpks[kk, 1])
+        lmbda = lmbda[lmbda != 0]
+        min_err_temp_avglambda = np.mean(lmbda)
+
+        # Wavelength matching
+        for ii in range(len(sorted_indices)):
+            alpha = subpixel_peaks[sorted_indices[ii]]
+            if alpha < 1e6:
+                for jj in range(len(self.acetaminophen_library)):
+                    if self.acetaminophen_library[jj] < 1e6:
+                        acet_fit, _ = lsqpolyval(P, alpha)
+                        lambda_exp = 1e7 / (acet_fit + self.acetaminophen_library[jj])
+                        if abs(lambda_exp - min_err_temp_avglambda) > 0.2 * np.mean(
+                                abs(error)) + 0.015 * np.floor(len(newfitpks) / len(New)):
+                            continue
+                        else:
+                            newfitpks = np.append(newfitpks, [[alpha, self.acetaminophen_library[jj]]],
+                                                  axis=0)
+                            lmbda = np.append(lmbda, [lambda_exp])
+                            self.acetaminophen_library[jj] = 1e6
+                            break
+
+        # Final processing
+        unsorted_indices = lmbda > 0
+        lambda_acet_unsort = lmbda[unsorted_indices]
+        lambda_ref = lmbda
+        lmbda = lmbda[lmbda != 0]
+        unsort_a_ind = lmbda > 0
+        lambda_acet_unsort = lmbda[unsort_a_ind]
+        lambda_acet = lambda_acet_unsort
+
+        channel['z'] = z
+        channel['newfitpks'] = newfitpks
+        channel['subpixel'] = subpixel_peaks
+        channel['error'] = np.squeeze(error)
+        channel['lambda_acet'] = lambda_acet_unsort
+        self.channel_acet = channel
+        return channel
+    def Calibration_without_acetSpec(self, nearxdata, nearydata, nearSpectrum, lambda_acet):
+        neon = self.process_neon(nearxdata, nearydata, nearSpectrum)
+        abs_Wvnaxis, _ = lsqpolyval(self.P_neon, np.arange(1, len(self.channel_neon['normalized']) + 1))
+        Wvn = (1e7 / lambda_acet) - abs_Wvnaxis
+        return Wvn
+    def Calibration_with_acetSpec(self, nearxdata, nearydata, nearSpectrum, acetxdata, acetydata, acetSpectrum):
+        neon = self.process_neon(nearxdata, nearydata, nearSpectrum)
+        acet = self.process_acet(acetxdata, acetydata, acetSpectrum)
+        lambda_acet_unsort = self.channel_acet['lambda_acet']
+        ExWVN_lambda = lambda_acet_unsort
+        # ExWVN_lambda = np.concatenate([lambda_acet_unsort, lambda_naph_unsort])
+        avg = np.mean(ExWVN_lambda)
+        stdev = np.std(ExWVN_lambda)
+        count_total = len(ExWVN_lambda)
+        Wavelength = np.array([avg, stdev, count_total])
+        abs_Wvnaxis, _ = lsqpolyval(self.P_neon, np.arange(1, len(self.channel_neon['normalized']) + 1))
+        Wvn = (1e7 / Wavelength[0]) - abs_Wvnaxis
+        return Wvn
+
+
+
+
