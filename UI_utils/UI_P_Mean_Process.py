@@ -288,9 +288,31 @@ class P_Mean_Process_UI(QMainWindow):
         self.operations = last_state["ops"].copy()
         if self.current_step_index > 0:
             self.current_step_index -= 1
-        self.update_plot()
-        self.label_current_step.setText("Current Step: " + self.processing_steps[self.current_step_index - 1])
-        self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
+
+        # Update plot depending on whether the last step was 'Polyfit'
+        step = self.processing_steps[self.current_step_index - 1] if self.current_step_index - 1 >= 0 else ""
+        if step == "Polyfit":
+            try:
+                polyorder = int(self.edit_polyorder.text())
+            except ValueError:
+                QMessageBox.warning(self, "Error", "Polyorder must be an integer!")
+                return
+            base, _ = FluorescenceBackgroundSubtraction(self.current_spect, polyorder)
+            x = self.current_wvn if self.current_wvn is not None and len(self.current_wvn) == len(self.current_spect) else np.arange(len(self.current_spect))
+            self.canvas.axes.clear()
+            self.canvas.axes.plot(x, self.current_spect, label="Spectrum", color="blue", linestyle='-')
+            self.canvas.axes.plot(x, base, label="Polyfit Line", color="red", linestyle='--')
+            self.canvas.axes.set_title("Polyfit Overview")
+            self.canvas.axes.legend()
+            self.canvas.draw()
+        else:
+            self.update_plot()
+
+        self.label_current_step.setText("Current Step: " + step)
+        if self.current_step_index < len(self.processing_steps):
+            self.label_next_step.setText("Next Step: " + self.processing_steps[self.current_step_index])
+        else:
+            self.label_next_step.setText("Processing Complete")
         self.update_step_ui()
 
     def on_next_step(self):
@@ -388,7 +410,15 @@ class P_Mean_Process_UI(QMainWindow):
 
     def on_save_figure(self):
         try:
-            filepath = wdata.save_figure(self.canvas.fig, self.operations, base_dir=".", file_ext="png")
+            # Prompt for custom filename
+            options = QFileDialog.Options()
+            filepath, _ = QFileDialog.getSaveFileName(
+                self, "Save Figure As", "processed_spectrum.png",
+                "PNG Files (*.png);;All Files (*)", options=options
+            )
+            if not filepath:
+                return
+            self.canvas.fig.savefig(filepath)
             self.label_saved_file.setText("Saved Figure: " + filepath)
             QMessageBox.information(self, "Saved", f"Figure saved to {filepath}")
         except Exception as e:
@@ -399,14 +429,24 @@ class P_Mean_Process_UI(QMainWindow):
             QMessageBox.warning(self, "Error", "Empty data, cannot save!")
             return
         try:
-            wvn_filepath = wdata.save_data(self.current_wvn.reshape(-1, 1), operations=self.operations, prefix='wvn',
-                                           base_dir=".", file_ext="csv", header="Wavelength")
-            spect_filepath = wdata.save_data(self.current_spect.reshape(-1, 1), operations=self.operations, prefix='spect',
-                                             base_dir=".", file_ext="csv", header="SpectralIntensity")
+            # Prompt user to select directory and filename prefix
+            options = QFileDialog.Options()
+            base_path, _ = QFileDialog.getSaveFileName(
+                self, "Save Spectral Data As", "spectrum_data",
+                "CSV Files (*.csv);;All Files (*)", options=options
+            )
+            if not base_path:
+                return
+            # Save both Wvn and Spect data
+            wvn_filepath = base_path + "_wvn.csv"
+            spect_filepath = base_path + "_spect.csv"
+            np.savetxt(wvn_filepath, self.current_wvn.reshape(-1, 1), delimiter=",", header="Wavelength", comments='')
+            np.savetxt(spect_filepath, self.current_spect.reshape(-1, 1), delimiter=",", header="SpectralIntensity", comments='')
             QMessageBox.information(self, "Saved",
                                     f"Data saved to:\n{wvn_filepath}\n{spect_filepath}")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to save data: {e}")
+
 
     def on_load_rdata_files(self):
         data_file, _ = QFileDialog.getOpenFileName(

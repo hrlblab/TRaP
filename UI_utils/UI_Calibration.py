@@ -1,4 +1,3 @@
-# main.py
 import sys
 import numpy as np
 import pandas as pd
@@ -209,7 +208,6 @@ class WaveformSelectionUI(QMainWindow):
             self.step = 4
         elif self.step == 4 and self.btn_continue.text() == "Finish":
             self.close()
-            QApplication.quit()
         self.update_step_ui()
 
     def prev_step(self):
@@ -219,17 +217,44 @@ class WaveformSelectionUI(QMainWindow):
 
     def ask_lambda_known(self):
         reply = QMessageBox.question(
-            self, "Laser Wavelength", "Do you know the laser wavelength (as a file with λ values)?",
+            self, "Laser Wavelength", "Do you know the laser wavelength?",
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
             self.lambda_known = True
-            self.get_lambda_file()
+            self.get_lambda_value()
         else:
+            QMessageBox.warning(
+                self,
+                "Warning",
+                "It is not recommended to estimate laser wavelength from spectra.\n"
+                "Please make sure you understand the implications before continuing."
+            )
             self.lambda_known = False
             self.step = 3.5
             self.prepare_acet_step()
         self.update_step_ui()
+
+    def get_lambda_value(self):
+        while True:
+            text, ok = QInputDialog.getText(self, "Laser Wavelength", "Enter known laser wavelength (in nm):")
+            if not ok:
+                return
+            try:
+                value = float(text)
+                if 0 < value < 9999:
+                    # Round to 3 decimal places
+                    value = round(value, 3)
+                    self.lambda_value_array = np.array([value])
+                    QMessageBox.information(self, "Wavelength Accepted", f"Lambda = {value:.3f} nm recorded.")
+                    self.step = 4
+                    self.update_step_ui()
+                    return
+                else:
+                    QMessageBox.warning(self, "Invalid Range", "Please enter a positive wavelength < 9999.")
+            except ValueError:
+                QMessageBox.warning(self, "Invalid Input",
+                                    "Please enter a valid floating point number with 3 decimal places.")
 
     def get_lambda_file(self):
         fileName, _ = QFileDialog.getOpenFileName(self, "Select Lambda File", "", "Supported Files (*.txt *.csv *.xlsx)")
@@ -291,13 +316,6 @@ class WaveformSelectionUI(QMainWindow):
             savemat(save_path, {'Cal': {'Wvn': Wvn}})
             self.progress_bar.setValue(100)
 
-            summary = f"""
-            Calibration Completed!
-            Used Neon peaks: {len(neon_x)}
-            {"Used Acet peaks: " + str(len(cal.acetX)) if not self.lambda_known else "Used external lambda file"}
-            Average λ: {np.mean(self.lambda_value_array):.2f} nm
-            """
-            QMessageBox.information(self, "Summary", summary.strip())
 
 
 if __name__ == "__main__":

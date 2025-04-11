@@ -440,6 +440,7 @@ class XAxisCalibration:
         ExWVN_lambda = lambda_acet_unsort
         # ExWVN_lambda = np.concatenate([lambda_acet_unsort, lambda_naph_unsort])
         avg = np.mean(ExWVN_lambda)
+        print(avg)
         stdev = np.std(ExWVN_lambda)
         count_total = len(ExWVN_lambda)
         Wavelength = np.array([avg, stdev, count_total])
