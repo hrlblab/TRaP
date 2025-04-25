@@ -217,7 +217,7 @@ class WaveformSelectionUI(QMainWindow):
 
     def ask_lambda_known(self):
         reply = QMessageBox.question(
-            self, "Laser Wavelength", "Do you know the laser wavelength?",
+            self, "Laser Wavelength", "Do you know the EXACT laser wavelength?",
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
