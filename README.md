@@ -161,14 +161,7 @@ Contributions are welcome! To contribute to TRaP App, please follow these steps:
 If you encounter any issues or have questions, please open an issue to discuss your ideas before starting your work.
 
 ## Detail Tutorial
-<details>
-  <summary>📑 Show Detail Tutorial </summary>
-
-<p align="center">
-  <embed src="docs/Document.pdf" type="application/pdf" width="100%" height="600px"/>
-</p>
-
-</details>
+For a complete, illustrated guide, see [`docs/Document.pdf`](docs/Document.pdf).
 
 ## Contact
 
