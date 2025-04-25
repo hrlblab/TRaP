@@ -10,10 +10,12 @@ This is a new version for the standardized RAMAN Process Application with GUI vi
 - [Project Structure](#project-structure)
 - [Built With](#built-with)
 - [Getting Started](#getting-started)
+- [Tutorial](#tutorial)
 - [Usage](#usage)
 - [Contributing](#contributing)
 - [License](#license)
 - [Contact](#contact)
+  
 
 ## Overview
 The TRaP APP is designed for a standard RAMAN Process Application with GUI via python, delivering a user-friendly software for both beginners and professionals.
@@ -47,6 +49,66 @@ The `UI_utils` package is designed to encapsulate common UI functions used acros
 
 ## Getting Started
 Follow these instructions to set up the project locally.
+
+## Tutorial
+
+Follow the four stages below to move from an empty workspace to calibrated, processed spectra.  
+(Screenshots in *Document.docx* correspond to each numbered step.)
+
+---
+
+### 1. Configure Your Session
+
+| Action | Where | Result |
+|--------|-------|--------|
+| **Open `Config Manager`** | Home → **Config Manager** | Configuration dialog appears |
+| Select **Name** and **System** | Dropdown menus | Identifies the config to use |
+| *(Optional)* Enable **X-axis Calibration** | Toggle **Use X-axis Calibration → Yes** | Adds X-axis adjustment support |
+| **Save** a new config – or – **Load** an existing one | Buttons at bottom | Unlocks all other features |
+
+---
+
+### 2. Create a Calibration File
+
+1. Go to **Calibration**.  
+2. **Upload NeAr spectrum** and enter the expected **peak count**.  
+3. On the plot, **click each peak**.  
+4. Choose whether the **system wavelength is known**:  
+   * **Known** → type the value.  
+   * **Unknown** →  
+     1. Select “No”.  
+     2. **Upload acetaminophen spectrum**.  
+     3. Enter its **peak count** and click peaks for alignment.  
+5. Click **Process and Save** to output a `*.Cal` file.
+
+---
+
+### 3. Explore the *P-Mean* Workflow Interactively
+
+| Step | What to Do | UI Element |
+|------|------------|------------|
+| **Set parameters** | Fill **Start**, **Stop**, and **Poly order** | Input fields |
+| **Load data** | Press **Load Data Files** and choose:<br>• waveform<br>• white-light correction<br>• calibration file | File picker |
+| **Visualise** | Click **Next** to progress stage-by-stage | Plot canvas updates |
+| **Tune anytime** | Change parameters → click **Next** again | Immediate feedback |
+| **Track progress** | **Current Step** / **Next Step** labels | Know exactly where you are |
+
+---
+
+### 4. Batch-Process Multiple Spectra
+
+1. Open **Spectrum Batch Process**.  
+2. **Select Data Files** → upload one or more waveforms.  
+3. **Select WL Correction File** → upload the white-light correction.  
+4. **Select Calibration File** → upload the `*.Cal` from Step&nbsp;2.  
+5. Press **Start Batch Process**. All spectra are processed automatically and results are saved alongside the originals.
+
+---
+
+### Tips
+
+* Ensure all spectra in a batch share the **same acquisition settings** as the calibration reference for best accuracy.  
+* You may revisit **Config Manager** at any time—changes take effect immediately after saving.
 
 ### Prerequisites
 - Python 3.11
