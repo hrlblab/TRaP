@@ -162,7 +162,7 @@ If you encounter any issues or have questions, please open an issue to discuss y
 
 ## Detail Tutorial
 <details>
-  <summary>📑 展开内嵌教程（PDF）</summary>
+  <summary>📑 Show Detail Tutorial </summary>
 
 <p align="center">
   <embed src="docs/Document.pdf" type="application/pdf" width="100%" height="600px"/>
