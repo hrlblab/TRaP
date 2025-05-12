@@ -4,7 +4,7 @@ import json
 
 import numpy as np
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel, QPushButton,
-                             QVBoxLayout, QFileDialog, QMessageBox, QHBoxLayout, QListWidget)
+                             QVBoxLayout, QFileDialog, QMessageBox, QHBoxLayout, QListWidget, QLineEdit)
 from utils.io import wdata, rdata
 from utils.SpectralPreprocess import (Binning, Denoise, Truncate, CosmicRayRemoval,
                                       SpectralResponseCorrection, subtractBaseline,
@@ -64,7 +64,7 @@ class BatchPMeanUI(QMainWindow):
         # WL Correction and wvn: single file selections.
         self.wlcorr_file = None
         self.wvn_file = None
-
+        self.output_root = None
         self.initUI()
 
     def initUI(self):
@@ -105,6 +105,15 @@ class BatchPMeanUI(QMainWindow):
         btn_start.clicked.connect(self.on_start_batch)
         layout.addWidget(btn_start)
 
+        btn_select_output = QPushButton("Select Output Folder")
+        lineedit_output = QLineEdit()
+        lineedit_output.setReadOnly(True)
+        btn_select_output.clicked.connect(self.on_select_output_folder)
+        layout.addWidget(btn_select_output)
+        layout.addWidget(lineedit_output)
+
+
+
         self.label_status = QLabel("Status: Waiting")
         layout.addWidget(self.label_status)
 
@@ -122,6 +131,13 @@ class BatchPMeanUI(QMainWindow):
             self.list_data.clear()
             for f in files:
                 self.list_data.addItem(f)
+
+    def on_select_output_folder(self):
+        """Open a folder dialog and let user pick an output root."""
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        if folder:
+            self.output_root = folder
+            self.lineedit_output.setText(folder)
 
     def on_select_wlcorr(self):
         file, _ = QFileDialog.getOpenFileName(self, "Select WL Correction File", "",
@@ -149,8 +165,11 @@ class BatchPMeanUI(QMainWindow):
 
         # Build output folder based on directory of first data file.
         base_dir = os.path.normpath(os.path.dirname(self.data_files[0]))
-        output_folder = os.path.join(base_dir, "Processed")
-        output_folder = os.path.abspath(output_folder)
+        if self.output_root is None:
+            output_folder = os.path.join(base_dir, "Processed")
+            output_folder = os.path.abspath(output_folder)
+        else:
+            output_folder = self.output_root
         os.makedirs(output_folder, exist_ok=True)
         processed_files = []
 
