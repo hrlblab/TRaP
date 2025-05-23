@@ -508,7 +508,7 @@ class P_Mean_Process_UI(QMainWindow):
             self.operations.append("LoadData")
             self.add_history("LoadData")
             self.update_plot()
-            QMessageBox.information(self, "Loaded", "rData files loaded successfully.")
+            QMessageBox.information(self, "Loaded", "Data files loaded successfully.")
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to read rData files: {e}")
 

@@ -204,6 +204,7 @@ class XAxisCalibration:
         channel['subpixel'] = subpixel_peaks
 
         # Polynomial fitting and error calculation
+        self.nearX = [11, 12, 14, 17, 18, 28, 34]
         ref_wavenumbers = self.neon_argon_library[self.nearX]
         newfitpks = np.column_stack((subpixel_peaks[low_idx - 1:high_idx], ref_wavenumbers[:]))
         channel['newfitpks'] = newfitpks
@@ -267,6 +268,8 @@ class XAxisCalibration:
         return channel
 
     def process_acet(self, xdata, ydata, acet_spectrum):
+        self.acetX = [14, 13, 12, 11]
+
         self.acet_xdata = xdata
         self.acet_ydata = ydata
         self.acet_spectrum = acet_spectrum
@@ -440,7 +443,7 @@ class XAxisCalibration:
         ExWVN_lambda = lambda_acet_unsort
         # ExWVN_lambda = np.concatenate([lambda_acet_unsort, lambda_naph_unsort])
         avg = np.mean(ExWVN_lambda)
-        print(avg)
+        # print(avg)
         stdev = np.std(ExWVN_lambda)
         count_total = len(ExWVN_lambda)
         Wavelength = np.array([avg, stdev, count_total])

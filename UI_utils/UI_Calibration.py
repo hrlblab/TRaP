@@ -46,6 +46,7 @@ class WaveformCanvas(FigureCanvas):
             else:
                 x = data[:, 0]
                 y = data[:, 1]
+            y = (y-min(y)) / (max(y)-min(y))
             self.data = (x, y)
             self.selected_points = []
             self.ax.clear()
@@ -305,6 +306,8 @@ class WaveformSelectionUI(QMainWindow):
             cal.nearX = np.arange(len(neon_x))
             cal.acetX = np.arange(len(acet_x))
             Wvn = cal.Calibration_with_acetSpec(neon_x, neon_y, self.neon_spectrum, acet_x, acet_y, self.acet_spectrum)
+        Wvn = Wvn.reshape(1, -1).T
+        print(Wvn.size)
 
         self.progress_bar.setValue(80)
         QApplication.processEvents()
