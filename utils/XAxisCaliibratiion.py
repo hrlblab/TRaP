@@ -268,7 +268,7 @@ class XAxisCalibration:
         return channel
 
     def process_acet(self, xdata, ydata, acet_spectrum):
-        self.acetX = [14, 13, 12, 11]
+        self.acetX = [15, 14, 13, 12]
 
         self.acet_xdata = xdata
         self.acet_ydata = ydata
@@ -293,7 +293,10 @@ class XAxisCalibration:
         channel['start'] = start
 
         # 4. Peak detection with threshold iteration
-        channel['threshold'] = 0.001
+        # channel['threshold'] = 0.001
+        if np.any(norm_spec[:200] > 0.3):
+            norm_spec[:200] = 0
+        channel['threshold'] = min(norm_spec[min(channel['New_pos_Ker']) - 1:max(channel['New_pos_Ker'])])
         channel['w2'] = 4
         channel['iterLim'] = int(2e5)
         channel['newPeakLim'] = self.acet_num
