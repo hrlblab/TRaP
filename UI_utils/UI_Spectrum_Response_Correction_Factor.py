@@ -6,9 +6,6 @@ from PyQt5.QtWidgets import (
 )
 from scipy.io import loadmat
 
-# ⬇ 修改为你的真实路径
-from UI_utils.UI_Calibration import WaveformSelectionUI
-
 
 class SpectrumCorrectionProcessUI(QDialog):
     def __init__(self, parent=None):
@@ -86,36 +83,15 @@ class SpectrumCorrectionProcessUI(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Error", str(e))
         else:
-            # self.calib_ui = WaveformSelectionUI()
-            # self.calib_ui.show()
 
             QMessageBox.information(
                 self,
                 "Complete Calibration",
                 "Please complete the X Axis Calibration in the opened window,\nthen save it as a .mat file.\n\nClick OK to continue when done."
             )
+            self.result = "RequireXAxisCalibration"
+            self.accept()
 
-            # file_path, _ = QFileDialog.getOpenFileName(
-            #     self,
-            #     "Select Saved Calibration File (.mat)",
-            #     "",
-            #     "MAT files (*.mat);;All Files (*)"
-            # )
-            # if not file_path:
-            #     QMessageBox.warning(self, "Error", "No calibration file selected.")
-            #     return
-            # try:
-            #     mat = loadmat(file_path)
-            #     if "Cal" in mat and isinstance(mat["Cal"], np.ndarray):
-            #         cal_struct = mat["Cal"]
-            #         if "Wvn" in cal_struct.dtype.names:
-            #             self.wvn = cal_struct["Wvn"][0, 0].flatten()
-            #             self.result = "WvnUploaded"
-            #             self.accept()
-            #             return
-            #     QMessageBox.warning(self, "Invalid File", "Missing Cal['Wvn']")
-            # except Exception as e:
-            #     QMessageBox.critical(self, "Error", str(e))
 
         self.set_question(
             "Choose source for correction:\nWhite Light or Standard?",
