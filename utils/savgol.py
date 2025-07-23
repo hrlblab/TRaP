@@ -10,7 +10,7 @@ from numpy.linalg import pinv
 def savgol_filter(y, width, order, deriv):
     if y.ndim == 1:
         m = len(y)
-        n = 1  # 因为它是一维的，我们可以假设第二个维度是1
+        n = 1
     else:
         m, n = y.shape
     p = (width - 1) // 2
