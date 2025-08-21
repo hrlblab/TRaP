@@ -17,7 +17,7 @@ def apply_modern_style(app):
             color: #EAEAEA;
             background: #121212;
         }
-        QLabel#Title { font-size: 18px; font-weight: 600; }
+        QLabel#Title { font-size: 36px; font-weight: 600; }
         QLabel#Subtitle { color:#8B8B8B; }
         QPushButton {
             border: none;
@@ -202,8 +202,8 @@ class SystemSelectWizard(QWidget):
         # 4: Batch Process
         self.steps = [
             "Config Manager",
-            "Calibration",
-            "White Light Correction",
+            "X-axis Calibration",
+            "Spectra Response Correction",
             "Spectrum Process",
             "Spectrum Batch Process"
         ]

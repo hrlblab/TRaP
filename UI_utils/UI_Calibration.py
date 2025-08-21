@@ -50,8 +50,8 @@ class WaveformCanvas(FigureCanvas):
             self.data = (x, y)
             self.selected_points = []
             self.ax.clear()
-            self.ax.plot(x, y, label="Waveform")
-            self.ax.set_title(f"Waveform Plot")
+            self.ax.plot(x, y)
+            self.ax.set_title(f"User-Measured NeAr Spectrum")
             self.ax.legend()
             self.draw()
             self.show()
@@ -163,7 +163,7 @@ class WaveformSelectionUI(QMainWindow):
             self.btn_process.show()
             self.canvas.show()
             self.label_current.show()
-            self.btn_continue.setText("Finish")
+            self.btn_continue.setText("Exit")
             self.btn_continue.show()
 
     def upload_neon(self):
@@ -207,7 +207,7 @@ class WaveformSelectionUI(QMainWindow):
             for p in self.waveform2_points:
                 self.list_points.addItem(str(p))
             self.step = 4
-        elif self.step == 4 and self.btn_continue.text() == "Finish":
+        elif self.step == 4 and self.btn_continue.text() == "Exit":
             self.close()
         self.update_step_ui()
 
@@ -218,19 +218,19 @@ class WaveformSelectionUI(QMainWindow):
 
     def ask_lambda_known(self):
         reply = QMessageBox.question(
-            self, "Laser Wavelength", "Do you know the EXACT laser wavelength?",
+            self, "Laser Wavelength", "Do you know the EXACT laser wavelength with AT LEAST three decimal places? \nIf not, you will be need to upload an Acetominophen spectrum measurement on your system to approximate it. Note that this approximation is not recommended. Please make sure you understand the implication of this before proceeding.",
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.Yes:
             self.lambda_known = True
             self.get_lambda_value()
         else:
-            QMessageBox.warning(
-                self,
-                "Warning",
-                "It is not recommended to estimate laser wavelength from spectra.\n"
-                "Please make sure you understand the implications before continuing."
-            )
+            # QMessageBox.warning(
+            #     self,
+            #     "Warning",
+            #     "It is not recommended to estimate laser wavelength from spectra.\n"
+            #     "Please make sure you understand the implications before continuing."
+            # )
             self.lambda_known = False
             self.step = 3.5
             self.prepare_acet_step()
@@ -238,7 +238,7 @@ class WaveformSelectionUI(QMainWindow):
 
     def get_lambda_value(self):
         while True:
-            text, ok = QInputDialog.getText(self, "Laser Wavelength", "Enter known laser wavelength (in nm):")
+            text, ok = QInputDialog.getText(self, "Laser Wavelength", "Enter known exact laser wavelength (in nm):")
             if not ok:
                 return
             try:
