@@ -21,10 +21,11 @@ config_manager = ConfigManager()
 def moving_average(data, window=5):
     return np.convolve(data, np.ones(window) / window, mode='same')
 
-
 def median_filter(data, kernel_size=5):
+    # Ensure odd kernel for median filter (scipy requires odd)
+    if kernel_size % 2 == 0:
+        kernel_size += 1
     return medfilt(data, kernel_size=kernel_size)
-
 
 # Configuration file name
 CONFIG_FILE = "p_mean_config.json"
@@ -104,7 +105,7 @@ class P_Mean_Process_UI(QMainWindow):
         layout.addWidget(self.canvas)
         self.update_plot()
 
-        # Parameter input area (Start, Stop, Polyorder)
+        # Parameter input area (Start, Stop, Polyorder, BinWidth)
         param_layout = QHBoxLayout()
         self.label_start = QLabel("Start:")
         param_layout.addWidget(self.label_start)
@@ -118,6 +119,11 @@ class P_Mean_Process_UI(QMainWindow):
         param_layout.addWidget(self.label_polyorder)
         self.edit_polyorder = QLineEdit("7")
         param_layout.addWidget(self.edit_polyorder)
+        # --- NEW: BinWidth input (always visible) ---
+        self.label_binwidth = QLabel("BinWidth:")
+        param_layout.addWidget(self.label_binwidth)
+        self.edit_binwidth = QLineEdit("3.5")
+        param_layout.addWidget(self.edit_binwidth)
         layout.addLayout(param_layout)
 
         # Denoise method selection (visible only in "Denoise" step)
@@ -125,24 +131,39 @@ class P_Mean_Process_UI(QMainWindow):
         self.label_denoise = QLabel("Denoise Method:")
         denoise_layout.addWidget(self.label_denoise)
         self.combo_denoise = QComboBox()
-        self.combo_denoise.addItems(["Savitzky-Golay", "Moving Average", "Median Filter"])
+        self.combo_denoise.addItems(["Savitzky-Golay", "Moving Average", "Median Filter", "None"])
         denoise_layout.addWidget(self.combo_denoise)
+
+        # --- NEW: method-specific inputs (shown only during Denoise step) ---
+        # SG params
+        self.label_sgorder = QLabel("SGorder:")
+        denoise_layout.addWidget(self.label_sgorder)
+        self.edit_sgorder = QLineEdit("2")
+        denoise_layout.addWidget(self.edit_sgorder)
+        self.label_sgframe = QLabel("SGframe:")
+        denoise_layout.addWidget(self.label_sgframe)
+        self.edit_sgframe = QLineEdit("7")
+        denoise_layout.addWidget(self.edit_sgframe)
+        # MA param
+        self.label_mawindow = QLabel("MAWindow:")
+        denoise_layout.addWidget(self.label_mawindow)
+        self.edit_mawindow = QLineEdit("5")
+        denoise_layout.addWidget(self.edit_mawindow)
+        # Median param
+        self.label_mediank = QLabel("MedianKernel:")
+        denoise_layout.addWidget(self.label_mediank)
+        self.edit_mediank = QLineEdit("5")
+        denoise_layout.addWidget(self.edit_mediank)
+
         layout.addLayout(denoise_layout)
+
+        # Initially hide denoise area until the Denoise step
         self.label_denoise.setVisible(False)
         self.combo_denoise.setVisible(False)
-
-        # # Comparison option: only displayed during FBS step.
-        # compare_layout = QHBoxLayout()
-        # self.label_compare = QLabel("Generate Comparison Plot:")
-        # compare_layout.addWidget(self.label_compare)
-        # self.chk_compare = QComboBox()
-        # self.chk_compare.addItems(["Yes", "No"])
-        # self.chk_compare.setCurrentText("Yes")
-        # compare_layout.addWidget(self.chk_compare)
-        # layout.addLayout(compare_layout)
-        # # Initially, hide the comparison option until reaching FBS step.
-        # self.label_compare.setVisible(False)
-        # self.chk_compare.setVisible(False)
+        self.label_sgorder.setVisible(False); self.edit_sgorder.setVisible(False)
+        self.label_sgframe.setVisible(False); self.edit_sgframe.setVisible(False)
+        self.label_mawindow.setVisible(False); self.edit_mawindow.setVisible(False)
+        self.label_mediank.setVisible(False); self.edit_mediank.setVisible(False)
 
         # Configuration buttons (Save Config and Load Config)
         config_layout = QHBoxLayout()
@@ -181,7 +202,6 @@ class P_Mean_Process_UI(QMainWindow):
         self.btn_previous.setVisible(False)
         nav_layout.addWidget(self.btn_previous)
 
-
         self.btn_next = QPushButton("Next")
         self.btn_next.clicked.connect(self.on_next_step)
         self.btn_next.setVisible(False)
@@ -209,15 +229,23 @@ class P_Mean_Process_UI(QMainWindow):
             self.canvas.plot(self.current_spect)
 
     def update_step_ui(self):
-        # Only show the denoise method selection when current step is "Denoise"
-        if self.current_step_index < len(self.processing_steps) and \
-           self.processing_steps[self.current_step_index] == "Denoise":
-            self.label_denoise.setVisible(True)
-            self.combo_denoise.setVisible(True)
-        else:
-            self.label_denoise.setVisible(False)
-            self.combo_denoise.setVisible(False)
+        """Toggle visibility of denoise parameter editors based on current step."""
+        is_denoise_step = (
+            self.current_step_index < len(self.processing_steps)
+            and self.processing_steps[self.current_step_index] == "Denoise"
+        )
+        self.label_denoise.setVisible(is_denoise_step)
+        self.combo_denoise.setVisible(is_denoise_step)
 
+        # Show/hide method-specific inputs along with the step
+        method = self.combo_denoise.currentText()
+        show_sg = is_denoise_step and (method == "Savitzky-Golay")
+        show_ma = is_denoise_step and (method == "Moving Average")
+        show_med = is_denoise_step and (method == "Median Filter")
+        self.label_sgorder.setVisible(show_sg); self.edit_sgorder.setVisible(show_sg)
+        self.label_sgframe.setVisible(show_sg); self.edit_sgframe.setVisible(show_sg)
+        self.label_mawindow.setVisible(show_ma); self.edit_mawindow.setVisible(show_ma)
+        self.label_mediank.setVisible(show_med); self.edit_mediank.setVisible(show_med)
 
     def add_history(self, op_name):
         state = {
@@ -243,6 +271,12 @@ class P_Mean_Process_UI(QMainWindow):
             config["Stop"] = float(self.edit_stop.text())
             config["Polyorder"] = int(self.edit_polyorder.text())
             config["DenoiseMethod"] = self.combo_denoise.currentText()
+            # --- NEW: save extra parameters ---
+            config["BinWidth"] = float(self.edit_binwidth.text())
+            config["SGorder"] = int(self.edit_sgorder.text())
+            config["SGframe"] = int(self.edit_sgframe.text())
+            config["MAWindow"] = int(self.edit_mawindow.text())
+            config["MedianKernel"] = int(self.edit_mediank.text())
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Parameter input error: {e}")
             return
@@ -270,6 +304,12 @@ class P_Mean_Process_UI(QMainWindow):
                 self.edit_stop.setText(str(config.get("Stop", 1700)))
                 self.edit_polyorder.setText(str(config.get("Polyorder", 7)))
                 self.combo_denoise.setCurrentText(config.get("DenoiseMethod", "Savitzky-Golay"))
+                # --- NEW: load extra parameters ---
+                self.edit_binwidth.setText(str(config.get("BinWidth", 3.5)))
+                self.edit_sgorder.setText(str(config.get("SGorder", 2)))
+                self.edit_sgframe.setText(str(config.get("SGframe", 7)))
+                self.edit_mawindow.setText(str(config.get("MAWindow", 5)))
+                self.edit_mediank.setText(str(config.get("MedianKernel", 5)))
                 QMessageBox.information(self, "Config Loaded", "Configuration loaded successfully.")
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to load config: {e}")
@@ -344,19 +384,61 @@ class P_Mean_Process_UI(QMainWindow):
                 return
             start = self.current_wvn[0]
             stop = self.current_wvn[-1]
-            binned_spect, new_wvn = Binning(start, stop, self.current_wvn, self.current_spect, binwidth=3.5)
+            # --- NEW: read BinWidth from UI (fallback 3.5) ---
+            try:
+                binwidth = float(self.edit_binwidth.text())
+            except Exception:
+                binwidth = 3.5
+            if binwidth <= 0:
+                QMessageBox.warning(self, "Error", "BinWidth must be a positive number!")
+                return
+            binned_spect, new_wvn = Binning(start, stop, self.current_wvn, self.current_spect, binwidth=binwidth)
             self.current_spect = binned_spect
             self.current_wvn = new_wvn
-            self.operations.append("Binning")
+            self.operations.append(f"Binning(binwidth={binwidth})")
         elif step == "Denoise":
             method = self.combo_denoise.currentText()
             if method == "Savitzky-Golay":
-                self.current_spect = Denoise(self.current_spect, SGorder=2, SGframe=7)
+                # --- NEW: SGorder & SGframe from UI ---
+                try:
+                    sg_order = int(self.edit_sgorder.text())
+                    sg_frame = int(self.edit_sgframe.text())
+                except Exception:
+                    QMessageBox.warning(self, "Error", "SGorder/SGframe must be integers!")
+                    return
+                if sg_frame < 3 or sg_frame % 2 == 0:
+                    QMessageBox.warning(self, "Error", "SGframe must be an odd integer >= 3!")
+                    return
+                self.current_spect = Denoise(self.current_spect, SGorder=sg_order, SGframe=sg_frame)
+                self.operations.append(f"Denoise(SG, order={sg_order}, frame={sg_frame})")
             elif method == "Moving Average":
-                self.current_spect = moving_average(self.current_spect, window=5)
+                # --- NEW: MAWindow from UI ---
+                try:
+                    w = int(self.edit_mawindow.text())
+                except Exception:
+                    QMessageBox.warning(self, "Error", "MAWindow must be an integer!")
+                    return
+                if w < 1:
+                    QMessageBox.warning(self, "Error", "MAWindow must be >= 1!")
+                    return
+                self.current_spect = moving_average(self.current_spect, window=w)
+                self.operations.append(f"Denoise(MA, window={w})")
             elif method == "Median Filter":
-                self.current_spect = median_filter(self.current_spect, kernel_size=5)
-            self.operations.append(f"Denoise({method})")
+                # --- NEW: MedianKernel from UI ---
+                try:
+                    k = int(self.edit_mediank.text())
+                except Exception:
+                    QMessageBox.warning(self, "Error", "MedianKernel must be an integer!")
+                    return
+                if k < 1:
+                    QMessageBox.warning(self, "Error", "MedianKernel must be >= 1!")
+                    return
+                self.current_spect = median_filter(self.current_spect, kernel_size=k)
+                self.operations.append(f"Denoise(Median, kernel={k})")
+            else:
+                self.operations.append("Denoise(None)")
+            # Ensure the method-specific editors appear only during this step
+            # (visibility handled by update_step_ui)
         elif step == 'Polyfit':
             try:
                 polyorder = int(self.edit_polyorder.text())
@@ -367,7 +449,6 @@ class P_Mean_Process_UI(QMainWindow):
             base, finalSpect = FluorescenceBackgroundSubtraction(self.current_spect, polyorder)
             self.operations.append(f"FluorescenceBackgroundSubtraction(polyorder={polyorder})")
             self.current_spect = before
-            # Check if the user wants a comparison plot
 
             if self.current_wvn is not None and len(self.current_wvn) == len(before):
                 x = self.current_wvn
@@ -447,7 +528,6 @@ class P_Mean_Process_UI(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to save data: {e}")
 
-
     def on_load_rdata_files(self):
         data_file, _ = QFileDialog.getOpenFileName(
             self,
@@ -474,16 +554,11 @@ class P_Mean_Process_UI(QMainWindow):
             # data_df = rdata.read_txt_file(data_file, delimiter=',', header=None)
             # self.current_spect = data_df.iloc[:, 1:].mean(axis=1).to_numpy().astype(np.float64)
 
-
             data_df = rdata.load_spectrum_data(data_file)
             self.current_spect = data_df.flatten().astype(np.float64)
             if data_df is None:
                 QMessageBox.warning(self, "Error", "Can't read data file")
                 return
-
-
-            print(self.current_spect)
-
 
             wl_corr = rdata.read_txt_file(wlcorr_file)
             if wl_corr is None:
@@ -512,8 +587,8 @@ class P_Mean_Process_UI(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to read rData files: {e}")
 
-# if __name__ == "__main__":
-#     app = QApplication(sys.argv)
-#     window = P_Mean_Process_UI()
-#     window.show()
-#     sys.exit(app.exec_())
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = P_Mean_Process_UI()
+    window.show()
+    sys.exit(app.exec_())
