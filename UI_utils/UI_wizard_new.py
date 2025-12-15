@@ -150,7 +150,8 @@ def animate_step_change(widget: QWidget):
 # ---------------------------
 
 from UI_utils.UI_Config_Manager import ConfigManagerUI, ConfigManager
-from UI_utils.UI_Spectrum_Response_Correction_Factor import SpectrumCorrectionProcessUI
+# from UI_utils.UI_Spectrum_Response_Correction_Factor import SpectrumCorrectionProcessUI  # Old UI
+from UI_utils.UI_SRCF import SRCF_UI  # New Spectral Response Correction Factor UI
 from UI_utils.UI_Calibration import WaveformSelectionUI
 from UI_utils.UI_P_Mean_Process import P_Mean_Process_UI
 from UI_utils.UI_P_Mean_Batch_Process import BatchPMeanUI
@@ -334,25 +335,40 @@ class SystemSelectWizard(QWidget):
                 self._update_visibility_per_step()
                 return
 
-            dlg = SpectrumCorrectionProcessUI(self)
-            if hasattr(dlg, "exec_"):
-                if dlg.exec_():
-                    if getattr(dlg, "result", None) == "RequireXAxisCalibration" and not self.has_calibration_file:
-                        self.step = 1
-                    else:
-                        self.step = 3
-                    self._update_buttons()
-                    self._update_step_header()
-                    self._update_visibility_per_step()
-            else:
-                dlg.show()
-                self.opened_windows.append(dlg)
-                QMessageBox.information(self, "White Light Correction",
-                                        "Complete the correction in the new window, then close it.")
-                self.step = 3
+            # Old UI (commented out):
+            # dlg = SpectrumCorrectionProcessUI(self)
+            # if hasattr(dlg, "exec_"):
+            #     if dlg.exec_():
+            #         if getattr(dlg, "result", None) == "RequireXAxisCalibration" and not self.has_calibration_file:
+            #             self.step = 1
+            #         else:
+            #             self.step = 3
+            #         self._update_buttons()
+            #         self._update_step_header()
+            #         self._update_visibility_per_step()
+            # else:
+            #     dlg.show()
+            #     self.opened_windows.append(dlg)
+            #     QMessageBox.information(self, "White Light Correction",
+            #                             "Complete the correction in the new window, then close it.")
+            #     self.step = 3
+            #     self._update_buttons()
+            #     self._update_step_header()
+            #     self._update_visibility_per_step()
+
+            # New UI (SRCF_UI):
+            dlg = SRCF_UI(self)
+            if dlg.exec_():
+                if getattr(dlg, "result", None) == "RequireXAxisCalibration" and not self.has_calibration_file:
+                    self.step = 1
+                else:
+                    self.step = 3
                 self._update_buttons()
                 self._update_step_header()
                 self._update_visibility_per_step()
+            else:
+                # User cancelled
+                pass
 
         # Step 3: Spectrum Process
         elif idx == 3:

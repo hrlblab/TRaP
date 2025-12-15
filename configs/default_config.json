@@ -1,0 +1,13 @@
+{
+    "Name": "",
+    "System": "Cart",
+    "Exc Wavelength": "785",
+    "Detector": "256br",
+    "Probe": "Microscope",
+    "Spectrograph Name": "",
+    "CCD X": 0.0,
+    "CCD Y": 0.0,
+    "Raman Shift Range": "Fingerprint",
+    "Last Modified": "2025-12-15 11:12:27",
+    "Config File": "C:\\Users\\67007\\source\\repos\\ZhaishenGForSaken\\TRaP_App\\configs\\default_config.json"
+}
