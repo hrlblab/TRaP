@@ -156,6 +156,10 @@ def nist_correction_from_srm(
     Returns:
         correction factor (N,)
     """
+
+    coeffs = [9.71937e-02, 2.28325e-04, -5.86762e-08, 2.16023e-10, -9.77171e-14, 1.515596e-17]
+    # Still need calibration
+
     srm_measured = np.asarray(srm_measured, dtype=float).flatten()
     cal_wvn = np.asarray(cal_wvn, dtype=float).flatten()
     coeffs = np.asarray(coeffs, dtype=float).flatten()
