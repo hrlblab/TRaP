@@ -19,12 +19,12 @@ Workflow Steps:
   4. Batch Process - Batch processing of multiple spectra
 """
 
-from PyQt5.QtCore import Qt, QEasingCurve, QPropertyAnimation, QRect
-from PyQt5.QtGui import QPixmap, QFont, QIcon
+from PyQt5.QtCore import Qt, QEasingCurve, QPropertyAnimation, QRect, QParallelAnimationGroup, QSequentialAnimationGroup, QTimer
+from PyQt5.QtGui import QPixmap, QFont, QIcon, QColor
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QDialog, QLabel, QPushButton, QVBoxLayout, QHBoxLayout,
     QMessageBox, QFrame, QScrollArea, QGraphicsDropShadowEffect, QSizePolicy,
-    QCheckBox, QGroupBox, QGridLayout
+    QCheckBox, QGroupBox, QGridLayout, QGraphicsOpacityEffect
 )
 
 
@@ -221,16 +221,157 @@ class ModernShell(QWidget):
             b.style().polish(b)
 
 
-def animate_step_change(widget: QWidget):
-    """Animate widget transition when changing steps."""
-    start_rect = QRect(widget.x() + 20, widget.y(), widget.width(), widget.height())
-    end_rect = QRect(widget.x(), widget.y(), widget.width(), widget.height())
-    anim = QPropertyAnimation(widget, b"geometry", widget)
-    anim.setDuration(220)
-    anim.setStartValue(start_rect)
-    anim.setEndValue(end_rect)
-    anim.setEasingCurve(QEasingCurve.OutCubic)
-    anim.start()
+class AnimationManager:
+    """Manages smooth animations for UI transitions."""
+
+    _active_animations = []
+
+    @staticmethod
+    def slide_in(widget: QWidget, direction: str = "right", duration: int = 300):
+        """Animate widget sliding in from a direction."""
+        offset = 40
+        if direction == "right":
+            start_x, start_y = widget.x() + offset, widget.y()
+        elif direction == "left":
+            start_x, start_y = widget.x() - offset, widget.y()
+        elif direction == "up":
+            start_x, start_y = widget.x(), widget.y() - offset
+        else:  # down
+            start_x, start_y = widget.x(), widget.y() + offset
+
+        start_rect = QRect(start_x, start_y, widget.width(), widget.height())
+        end_rect = QRect(widget.x(), widget.y(), widget.width(), widget.height())
+
+        anim = QPropertyAnimation(widget, b"geometry", widget)
+        anim.setDuration(duration)
+        anim.setStartValue(start_rect)
+        anim.setEndValue(end_rect)
+        anim.setEasingCurve(QEasingCurve.OutCubic)
+
+        AnimationManager._active_animations.append(anim)
+        anim.finished.connect(lambda: AnimationManager._cleanup(anim))
+        anim.start()
+        return anim
+
+    @staticmethod
+    def fade_in(widget: QWidget, duration: int = 250):
+        """Animate widget fading in."""
+        effect = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(effect)
+
+        anim = QPropertyAnimation(effect, b"opacity", widget)
+        anim.setDuration(duration)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.OutQuad)
+
+        AnimationManager._active_animations.append(anim)
+        anim.finished.connect(lambda: AnimationManager._cleanup(anim))
+        anim.start()
+        return anim
+
+    @staticmethod
+    def fade_out(widget: QWidget, duration: int = 200):
+        """Animate widget fading out."""
+        effect = widget.graphicsEffect()
+        if not isinstance(effect, QGraphicsOpacityEffect):
+            effect = QGraphicsOpacityEffect(widget)
+            widget.setGraphicsEffect(effect)
+
+        anim = QPropertyAnimation(effect, b"opacity", widget)
+        anim.setDuration(duration)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+        anim.setEasingCurve(QEasingCurve.InQuad)
+
+        AnimationManager._active_animations.append(anim)
+        anim.finished.connect(lambda: AnimationManager._cleanup(anim))
+        anim.start()
+        return anim
+
+    @staticmethod
+    def pulse(widget: QWidget, duration: int = 400):
+        """Create a subtle pulse/scale animation."""
+        start_rect = widget.geometry()
+        # Slightly shrink then expand back
+        mid_rect = QRect(
+            start_rect.x() + 3, start_rect.y() + 2,
+            start_rect.width() - 6, start_rect.height() - 4
+        )
+
+        group = QSequentialAnimationGroup(widget)
+
+        shrink = QPropertyAnimation(widget, b"geometry", widget)
+        shrink.setDuration(duration // 2)
+        shrink.setStartValue(start_rect)
+        shrink.setEndValue(mid_rect)
+        shrink.setEasingCurve(QEasingCurve.OutQuad)
+
+        expand = QPropertyAnimation(widget, b"geometry", widget)
+        expand.setDuration(duration // 2)
+        expand.setStartValue(mid_rect)
+        expand.setEndValue(start_rect)
+        expand.setEasingCurve(QEasingCurve.OutBounce)
+
+        group.addAnimation(shrink)
+        group.addAnimation(expand)
+
+        AnimationManager._active_animations.append(group)
+        group.finished.connect(lambda: AnimationManager._cleanup(group))
+        group.start()
+        return group
+
+    @staticmethod
+    def slide_and_fade(widget: QWidget, direction: str = "right", duration: int = 350):
+        """Combined slide and fade animation for step transitions."""
+        group = QParallelAnimationGroup(widget)
+
+        # Slide animation
+        offset = 50
+        if direction == "right":
+            start_x, start_y = widget.x() + offset, widget.y()
+        elif direction == "left":
+            start_x, start_y = widget.x() - offset, widget.y()
+        else:
+            start_x, start_y = widget.x(), widget.y() + offset
+
+        start_rect = QRect(start_x, start_y, widget.width(), widget.height())
+        end_rect = QRect(widget.x(), widget.y(), widget.width(), widget.height())
+
+        slide = QPropertyAnimation(widget, b"geometry", widget)
+        slide.setDuration(duration)
+        slide.setStartValue(start_rect)
+        slide.setEndValue(end_rect)
+        slide.setEasingCurve(QEasingCurve.OutCubic)
+
+        # Fade animation
+        effect = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(effect)
+
+        fade = QPropertyAnimation(effect, b"opacity", widget)
+        fade.setDuration(duration)
+        fade.setStartValue(0.3)
+        fade.setEndValue(1.0)
+        fade.setEasingCurve(QEasingCurve.OutQuad)
+
+        group.addAnimation(slide)
+        group.addAnimation(fade)
+
+        AnimationManager._active_animations.append(group)
+        group.finished.connect(lambda: AnimationManager._cleanup(group))
+        group.start()
+        return group
+
+    @staticmethod
+    def _cleanup(anim):
+        """Clean up finished animation."""
+        if anim in AnimationManager._active_animations:
+            AnimationManager._active_animations.remove(anim)
+
+
+def animate_step_change(widget: QWidget, direction: str = "right"):
+    """Animate widget transition when changing steps with combined effects."""
+    return AnimationManager.slide_and_fade(widget, direction)
 
 
 # Import UI modules

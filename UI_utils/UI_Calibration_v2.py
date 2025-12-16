@@ -47,7 +47,14 @@ from utils.Calibration_v2 import ReferenceLibrary, CalibrationProcessor
 
 
 def load_spectrum_file(filepath: str) -> np.ndarray:
-    """Load spectrum data from file."""
+    """
+    Load spectrum data from file.
+
+    Supports: .txt, .csv, .xlsx files
+
+    Returns:
+        np.ndarray: Column vector (N, 1) for consistency across the workflow
+    """
     ext = filepath.lower().split('.')[-1]
     if ext in ['txt', 'csv']:
         data = np.loadtxt(filepath)
@@ -58,10 +65,13 @@ def load_spectrum_file(filepath: str) -> np.ndarray:
         raise ValueError(f"Unsupported file format: {ext}")
 
     if data.ndim == 1:
-        return data
+        return data.reshape(-1, 1)
     elif data.ndim == 2:
         # If 2 columns, use the second as intensity
-        return data[:, 1] if data.shape[1] >= 2 else data.flatten()
+        if data.shape[1] >= 2:
+            return data[:, 1].reshape(-1, 1)
+        else:
+            return data.reshape(-1, 1)
     else:
         raise ValueError("Invalid data format")
 

@@ -223,11 +223,170 @@ class ConfigManagerUI(QDialog):
         self.labels = {}
 
         self.setWindowTitle("Configuration Manager")
-        self.setMinimumSize(750, 550)
-        self.resize(850, 600)
+        self.setMinimumSize(800, 600)
+        self.resize(950, 680)
 
+        self._apply_style()
         self._build_ui()
         self._load_params_to_ui()
+
+    def _apply_style(self):
+        """Apply modern styling to the dialog."""
+        self.setStyleSheet("""
+            QDialog {
+                background: #121212;
+            }
+            QGroupBox {
+                font-weight: 600;
+                font-size: 13px;
+                border: 2px solid #333;
+                border-radius: 10px;
+                margin-top: 16px;
+                padding: 16px 12px 12px 12px;
+                background: #1a1a1a;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 14px;
+                padding: 0 10px;
+                color: #4C8BF5;
+            }
+            QLabel {
+                color: #EAEAEA;
+                font-size: 13px;
+            }
+            QLineEdit {
+                padding: 10px 12px;
+                border: 2px solid #333;
+                border-radius: 8px;
+                background: #1F1F1F;
+                color: #EAEAEA;
+                font-size: 13px;
+                selection-background-color: #4C8BF5;
+            }
+            QLineEdit:focus {
+                border-color: #4C8BF5;
+                background: #252525;
+            }
+            QLineEdit::placeholder {
+                color: #666;
+            }
+            QComboBox {
+                padding: 10px 12px;
+                border: 2px solid #333;
+                border-radius: 8px;
+                background: #1F1F1F;
+                color: #EAEAEA;
+                font-size: 13px;
+                min-height: 20px;
+            }
+            QComboBox:focus {
+                border-color: #4C8BF5;
+            }
+            QComboBox::drop-down {
+                border: none;
+                width: 28px;
+                background: transparent;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 6px solid #888;
+                margin-right: 8px;
+            }
+            QComboBox QAbstractItemView {
+                background: #1F1F1F;
+                border: 1px solid #333;
+                border-radius: 6px;
+                selection-background-color: #4C8BF5;
+                color: #EAEAEA;
+                padding: 4px;
+            }
+            QPushButton {
+                padding: 12px 20px;
+                border-radius: 8px;
+                border: 2px solid #333;
+                background: #1F1F1F;
+                color: #EAEAEA;
+                font-size: 13px;
+                font-weight: 500;
+                min-height: 20px;
+            }
+            QPushButton:hover {
+                background: #2A2A2A;
+                border-color: #444;
+            }
+            QPushButton:pressed {
+                background: #333;
+            }
+            QPushButton:disabled {
+                background: #1A1A1A;
+                color: #555;
+                border-color: #2A2A2A;
+            }
+            QPushButton[class="primary"] {
+                background: #4C8BF5;
+                color: white;
+                border: none;
+                font-weight: 600;
+            }
+            QPushButton[class="primary"]:hover {
+                background: #5B97F7;
+            }
+            QPushButton[class="primary"]:pressed {
+                background: #3B78E5;
+            }
+            QPushButton[class="success"] {
+                background: #28a745;
+                color: white;
+                border: none;
+                font-weight: 600;
+            }
+            QPushButton[class="success"]:hover {
+                background: #218838;
+            }
+            QListWidget {
+                background: #121212;
+                border: 2px solid #333;
+                border-radius: 8px;
+                padding: 6px;
+                outline: none;
+            }
+            QListWidget::item {
+                padding: 10px 12px;
+                border-radius: 6px;
+                margin: 3px 0;
+                color: #EAEAEA;
+            }
+            QListWidget::item:hover {
+                background: #2A2A2A;
+            }
+            QListWidget::item:selected {
+                background: #3A5A8A;
+                color: white;
+            }
+            QScrollArea {
+                border: none;
+                background: transparent;
+            }
+            QScrollBar:vertical {
+                background: #1A1A1A;
+                width: 10px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical {
+                background: #444;
+                border-radius: 5px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #555;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0;
+            }
+        """)
 
     def _build_ui(self):
         """Build the main UI layout."""
@@ -296,7 +455,7 @@ class ConfigManagerUI(QDialog):
 
         # New config button
         btn_new = QPushButton("New Configuration")
-        btn_new.setStyleSheet("background: #28a745; color: white;")
+        btn_new.setProperty("class", "success")
         btn_new.clicked.connect(self._new_config)
         layout.addWidget(btn_new)
 
@@ -432,7 +591,7 @@ class ConfigManagerUI(QDialog):
         btn_layout.addWidget(btn_save_as)
 
         btn_save = QPushButton("Save && Continue")
-        btn_save.setStyleSheet("background: #4C8BF5; color: white; font-weight: bold;")
+        btn_save.setProperty("class", "primary")
         btn_save.clicked.connect(self._save_and_continue)
         btn_layout.addWidget(btn_save)
 

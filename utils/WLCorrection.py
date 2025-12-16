@@ -41,7 +41,12 @@ light_curve_coeff = []
 #
 
 def read_vector_file(fp: str) -> np.ndarray:
-    """Read a 1D vector (txt/csv/xlsx). Returns float array (N,)."""
+    """
+    Read a single-column vector (txt/csv/xlsx).
+
+    Returns:
+        np.ndarray: Column vector (N, 1) for consistency across the workflow
+    """
     ext = os.path.splitext(fp)[1].lower()
     if ext in [".txt", ".csv"]:
         arr = np.loadtxt(fp, delimiter=None)
@@ -50,7 +55,7 @@ def read_vector_file(fp: str) -> np.ndarray:
         arr = df.values.squeeze()
     else:
         raise ValueError("Unsupported file format for vector.")
-    return np.asarray(arr, dtype=float).reshape(-1)
+    return np.asarray(arr, dtype=float).reshape(-1, 1)
 
 
 def read_2col_file(fp: str) -> np.ndarray:
@@ -94,8 +99,8 @@ def wl_correction_from_true_and_measured(
     Compute White-Light correction factor using utils modules.
 
     Args:
-        wl_measured: measured white-light spectrum (N,).
-        cal_wvn: wavenumber axis (cm^-1), (N,).
+        wl_measured: measured white-light spectrum (N,) or (N,1).
+        cal_wvn: wavenumber axis (cm^-1), (N,) or (N,1).
         wlmax_2col: (M,2) array: manufacturer-provided True WL [wavelength, intensity].
         smooth_window: window length for Savitzky-Golay filter.
         smooth_order: polynomial order for Savitzky-Golay filter.
@@ -103,7 +108,7 @@ def wl_correction_from_true_and_measured(
         center_wavelength: normalization wavelength.
 
     Returns:
-        correction factor (N,)
+        correction factor (N, 1) column vector
     """
     wl_measured = np.asarray(wl_measured, dtype=float).flatten()
     cal_wvn = np.asarray(cal_wvn, dtype=float).flatten()
@@ -129,7 +134,7 @@ def wl_correction_from_true_and_measured(
     NWL = SWL / (SWL[loc] if SWL[loc] != 0 else 1.0)
     WL_Correction = NTWL / np.where(NWL == 0, 1.0, NWL)
 
-    return WL_Correction.reshape(-1)
+    return WL_Correction.reshape(-1, 1)
 
 
 def nist_correction_from_srm(
@@ -145,16 +150,16 @@ def nist_correction_from_srm(
     Compute NIST/SRM correction using utils modules.
 
     Args:
-        srm_measured: measured SRM spectrum (N,).
-        cal_wvn: wavenumber axis (cm^-1), (N,).
-        coeffs: NIST polynomial coefficients.
+        srm_measured: measured SRM spectrum (N,) or (N,1).
+        cal_wvn: wavenumber axis (cm^-1), (N,) or (N,1).
+        coeffs: NIST polynomial coefficients (hardcoded internally).
         smooth_window: Savitzky-Golay smoothing window.
         smooth_order: smoothing polynomial order.
         center_wvn: normalization wavenumber.
         baseline_range: tuple defining the baseline subtraction range (start, end).
 
     Returns:
-        correction factor (N,)
+        correction factor (N, 1) column vector
     """
 
     coeffs = [9.71937e-02, 2.28325e-04, -5.86762e-08, 2.16023e-10, -9.77171e-14, 1.515596e-17]
@@ -186,4 +191,4 @@ def nist_correction_from_srm(
 
     # Final smoothing
     SRM_correction = utils.savgol.savgol_filter(SRM_correction, smooth_window, smooth_order, 0)
-    return SRM_correction.reshape(-1)
+    return SRM_correction.reshape(-1, 1)

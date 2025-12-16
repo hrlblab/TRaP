@@ -38,7 +38,7 @@ from matplotlib.figure import Figure
 
 # Import core functions from utils module
 from utils.WLCorrection import (
-    read_vector_file, read_2col_file, read_coeffs_file,
+    read_vector_file, read_2col_file,
     wl_correction_from_true_and_measured, nist_correction_from_srm
 )
 
@@ -74,8 +74,6 @@ class SRCF_UI(QDialog):
         # Files for NIST method
         self.file_srm_measured = None
         self.srm_data = None
-        self.file_coeffs = None
-        self.coeffs_data = None
 
         # Calibration file
         self.file_wvn_mat = None
@@ -125,8 +123,8 @@ class SRCF_UI(QDialog):
         method_layout.addStretch()
         left_layout.addWidget(method_group)
 
-        # ---------- Step 2: Calibration (for WL) ----------
-        self.calib_group = QGroupBox("Step 2: X-Axis Calibration (Required for WL)")
+        # ---------- Step 2: Calibration (for WL and NIST) ----------
+        self.calib_group = QGroupBox("Step 2: X-Axis Calibration")
         calib_layout = QVBoxLayout(self.calib_group)
 
         calib_row = QHBoxLayout()
@@ -211,16 +209,10 @@ class SRCF_UI(QDialog):
         srm_row.addStretch()
         nist_layout.addLayout(srm_row)
 
-        # NIST Coefficients
-        coeffs_row = QHBoxLayout()
-        self.btn_coeffs = QPushButton("Load NIST Polynomial Coefficients")
-        self.btn_coeffs.clicked.connect(self._load_coefficients)
-        self.lbl_coeffs = QLabel("Not loaded")
-        self.lbl_coeffs.setStyleSheet("color: #888;")
-        coeffs_row.addWidget(self.btn_coeffs)
-        coeffs_row.addWidget(self.lbl_coeffs)
-        coeffs_row.addStretch()
-        nist_layout.addLayout(coeffs_row)
+        # NIST Coefficients - hardcoded, show info label only
+        coeffs_info = QLabel("✓ NIST Polynomial Coefficients (built-in)")
+        coeffs_info.setStyleSheet("color: #28a745; font-style: italic;")
+        nist_layout.addWidget(coeffs_info)
 
         # NIST Parameters
         nist_params = QGridLayout()
@@ -377,8 +369,8 @@ class SRCF_UI(QDialog):
         """Update UI visibility based on selected method."""
         index = self.combo_method.currentIndex()
 
-        # Show/hide calibration group (only for WL)
-        self.calib_group.setVisible(index == 0)
+        # Show/hide calibration group (for WL and NIST, not for Load Existing)
+        self.calib_group.setVisible(index in [0, 1])
 
         # Show/hide input widgets
         self.wl_inputs_widget.setVisible(index == 0)
@@ -487,24 +479,6 @@ class SRCF_UI(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to read: {e}")
 
-    def _load_coefficients(self):
-        """Load NIST polynomial coefficients."""
-        fp, _ = QFileDialog.getOpenFileName(
-            self, "Select NIST Polynomial Coefficients",
-            "", "Data Files (*.txt *.csv *.xlsx);;All Files (*)"
-        )
-        if not fp:
-            return
-
-        try:
-            self.coeffs_data = read_coeffs_file(fp)
-            self.file_coeffs = fp
-            self.lbl_coeffs.setText(f"✓ Loaded ({len(self.coeffs_data)} coeffs)")
-            self.lbl_coeffs.setStyleSheet("color: #28a745;")
-            self.status_bar.showMessage(f"Coefficients loaded: {os.path.basename(fp)}")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to read: {e}")
-
     def _load_existing_factor(self):
         """Load an existing correction factor."""
         fp, _ = QFileDialog.getOpenFileName(
@@ -516,7 +490,7 @@ class SRCF_UI(QDialog):
 
         try:
             corr = read_vector_file(fp)
-            self.corr = corr.reshape(-1)
+            self.corr = corr  # Keep as (N, 1) column vector
             self.mode = "EXIST"
             self.result = "UseExistingFactor"
             self.lbl_exist.setText(f"✓ Loaded ({len(self.corr)} pts)")
@@ -541,7 +515,7 @@ class SRCF_UI(QDialog):
 
         try:
             data = read_vector_file(fp)
-            self.raw_spectrum = data.reshape(-1)
+            self.raw_spectrum = data  # Keep as (N, 1) column vector
             self.raw_spectrum_file = fp
             self.lbl_raw_status.setText(f"✓ Loaded ({len(self.raw_spectrum)} pts)")
             self.lbl_raw_status.setStyleSheet("color: #28a745;")
@@ -607,19 +581,16 @@ class SRCF_UI(QDialog):
     def _compute_nist_correction(self):
         """Compute NIST/SRM correction factor."""
         # Validation
+        if self.wvn is None:
+            QMessageBox.warning(self, "Missing", "Please load Calibration (.mat) first.")
+            return
         if self.srm_data is None:
             QMessageBox.warning(self, "Missing", "Please load SRM measured spectrum.")
             return
-        if self.coeffs_data is None:
-            QMessageBox.warning(self, "Missing", "Please load NIST polynomial coefficients.")
-            return
 
         try:
-            # Use wvn if available, otherwise use index
-            if self.wvn is not None and len(self.wvn) == len(self.srm_data):
-                x_axis = self.wvn
-            else:
-                x_axis = np.arange(len(self.srm_data), dtype=float)
+            # Truncate SRM data to match calibration length
+            srm_meas = self.srm_data[:len(self.wvn)]
 
             # Get parameters from UI
             smooth_win = self.spin_nist_smooth.value()
@@ -627,9 +598,9 @@ class SRCF_UI(QDialog):
             bl_start = self.spin_nist_bl_start.value()
             bl_end = self.spin_nist_bl_end.value()
 
-            # Compute correction
+            # Compute correction (coeffs are hardcoded in the function)
             self.corr = nist_correction_from_srm(
-                self.srm_data, x_axis, self.coeffs_data,
+                srm_meas, self.wvn, None,
                 smooth_window=smooth_win,
                 center_wvn=center_wvn,
                 baseline_range=(bl_start, bl_end)

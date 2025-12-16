@@ -46,6 +46,15 @@ def getwvnfrompath(path):
     return np.array(wvn, dtype=np.float64)
 
 def load_spectrum_data(filepath):
+    """
+    Load spectrum data from file.
+
+    Supports: .txt, .csv, .xlsx files
+    Auto-detects delimiter for text files.
+
+    Returns:
+        np.ndarray: Column vector (N, 1) for consistency across the workflow
+    """
     try:
         if filepath.endswith('.xlsx'):
             df = pd.read_excel(filepath, header=None)
