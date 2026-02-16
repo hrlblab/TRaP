@@ -44,6 +44,7 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.figure import Figure
 
 from utils.Calibration_v2 import ReferenceLibrary, CalibrationProcessor
+from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
 
 
 def load_spectrum_file(filepath: str) -> np.ndarray:
@@ -78,26 +79,71 @@ def load_spectrum_file(filepath: str) -> np.ndarray:
 
 class SpectrumCanvas(FigureCanvas):
     """
-    Interactive spectrum canvas for peak selection.
+    Interactive spectrum canvas for peak selection with crosshair tracking.
 
     Emits:
         peak_selected: Signal when a peak is selected
+        cursor_moved: Signal when cursor moves (pixel, intensity)
     """
 
     peak_selected = pyqtSignal(int, float)  # (pixel_position, intensity)
+    cursor_moved = pyqtSignal(int, float)   # (pixel_position, intensity)
 
     def __init__(self, parent=None, width=8, height=4, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.fig.set_facecolor(Colors.BG_SECONDARY)
         self.ax = self.fig.add_subplot(111)
         super().__init__(self.fig)
         self.setParent(parent)
 
         self.spectrum = None
+        self.normalized_spectrum = None
         self.selected_points = []
         self.max_points = 0
         self.selection_enabled = False
 
+        # Crosshair lines
+        self.crosshair_v = None  # Vertical line
+        self.crosshair_h = None  # Horizontal line
+        self.coord_text = None   # Coordinate display text
+
+        # Connect events
         self.mpl_connect('button_press_event', self._on_click)
+        self.mpl_connect('motion_notify_event', self._on_mouse_move)
+        self.mpl_connect('axes_leave_event', self._on_mouse_leave)
+
+        self._style_axis()
+
+    def _style_axis(self):
+        """Apply dark theme styling to axis."""
+        self.ax.set_facecolor(Colors.BG_TERTIARY)
+        self.ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
+        self.ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
+        for spine in self.ax.spines.values():
+            spine.set_color(Colors.BORDER)
+
+    def _init_crosshair(self):
+        """Initialize crosshair lines after spectrum is loaded."""
+        # Remove old crosshair if exists
+        if self.crosshair_v is not None:
+            self.crosshair_v.remove()
+        if self.crosshair_h is not None:
+            self.crosshair_h.remove()
+        if self.coord_text is not None:
+            self.coord_text.remove()
+
+        # Create crosshair lines (initially invisible)
+        self.crosshair_v = self.ax.axvline(x=0, color=Colors.WARNING, linewidth=1, linestyle='--', alpha=0.8, visible=False)
+        self.crosshair_h = self.ax.axhline(y=0, color=Colors.WARNING, linewidth=1, linestyle='--', alpha=0.8, visible=False)
+
+        # Coordinate text box
+        self.coord_text = self.ax.text(
+            0.02, 0.98, '', transform=self.ax.transAxes,
+            fontsize=12, verticalalignment='top',
+            fontfamily='monospace',
+            color=Colors.TEXT_PRIMARY,
+            bbox=dict(boxstyle='round,pad=0.5', facecolor=Colors.BG_DARK, edgecolor=Colors.PRIMARY, alpha=0.9)
+        )
 
     def load_spectrum(self, spectrum: np.ndarray, title: str = "Spectrum"):
         """Load and display a spectrum."""
@@ -106,16 +152,19 @@ class SpectrumCanvas(FigureCanvas):
         min_val = np.min(self.spectrum)
         max_val = np.max(self.spectrum)
         if max_val > min_val:
-            normalized = (self.spectrum - min_val) / (max_val - min_val)
+            self.normalized_spectrum = (self.spectrum - min_val) / (max_val - min_val)
         else:
-            normalized = self.spectrum
+            self.normalized_spectrum = self.spectrum.copy()
 
         self.ax.clear()
-        self.ax.plot(normalized, 'b-', linewidth=0.8)
-        self.ax.set_title(title)
-        self.ax.set_xlabel("Pixel")
-        self.ax.set_ylabel("Normalized Intensity")
-        self.ax.grid(True, alpha=0.3)
+        self._style_axis()
+        self.ax.plot(self.normalized_spectrum, color=Colors.PRIMARY, linewidth=1.0)
+        self.ax.set_title(title, fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax.set_xlabel("Pixel", fontsize=12, color=Colors.TEXT_SECONDARY)
+        self.ax.set_ylabel("Normalized Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
+
+        # Initialize crosshair
+        self._init_crosshair()
 
         self.selected_points = []
         self.draw()
@@ -137,6 +186,53 @@ class SpectrumCanvas(FigureCanvas):
     def get_selected_points(self) -> list:
         """Get list of selected (pixel, intensity) tuples."""
         return self.selected_points.copy()
+
+    def _on_mouse_move(self, event):
+        """Handle mouse movement - update crosshair position."""
+        if event.inaxes != self.ax:
+            return
+        if self.spectrum is None:
+            return
+        if self.crosshair_v is None:
+            return
+
+        x = event.xdata
+        y = event.ydata
+
+        if x is None or y is None:
+            return
+
+        # Get pixel position and actual intensity
+        pixel = int(round(x))
+        if 0 <= pixel < len(self.spectrum):
+            actual_intensity = self.spectrum[pixel]
+            norm_intensity = self.normalized_spectrum[pixel]
+
+            # Update crosshair position
+            self.crosshair_v.set_xdata([pixel, pixel])
+            self.crosshair_h.set_ydata([norm_intensity, norm_intensity])
+            self.crosshair_v.set_visible(True)
+            self.crosshair_h.set_visible(True)
+
+            # Update coordinate text
+            self.coord_text.set_text(f'Pixel: {pixel}\nIntensity: {actual_intensity:.2f}')
+            self.coord_text.set_visible(True)
+
+            # Use blitting for performance
+            self.draw_idle()
+
+            # Emit signal
+            self.cursor_moved.emit(pixel, actual_intensity)
+
+    def _on_mouse_leave(self, event):
+        """Hide crosshair when mouse leaves the axes."""
+        if self.crosshair_v is not None:
+            self.crosshair_v.set_visible(False)
+        if self.crosshair_h is not None:
+            self.crosshair_h.set_visible(False)
+        if self.coord_text is not None:
+            self.coord_text.set_visible(False)
+        self.draw_idle()
 
     def _on_click(self, event):
         """Handle mouse click for peak selection."""
@@ -165,25 +261,22 @@ class SpectrumCanvas(FigureCanvas):
         peak_y = self.spectrum[peak_x]
 
         # Normalize y for display
-        min_val = np.min(self.spectrum)
-        max_val = np.max(self.spectrum)
-        if max_val > min_val:
-            peak_y_norm = (peak_y - min_val) / (max_val - min_val)
-        else:
-            peak_y_norm = peak_y
+        peak_y_norm = self.normalized_spectrum[peak_x]
 
         self.selected_points.append((peak_x, peak_y))
 
-        # Mark on plot
-        self.ax.plot(peak_x, peak_y_norm, 'ro', markersize=8)
+        # Mark on plot with prominent style
+        self.ax.plot(peak_x, peak_y_norm, 'o', color=Colors.DANGER, markersize=10, markeredgecolor='white', markeredgewidth=2)
         self.ax.annotate(
             f"{len(self.selected_points)}",
             (peak_x, peak_y_norm),
             textcoords="offset points",
-            xytext=(0, 10),
+            xytext=(0, 12),
             ha='center',
-            fontsize=9,
-            color='red'
+            fontsize=11,
+            fontweight='bold',
+            color=Colors.DANGER,
+            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', edgecolor=Colors.DANGER, alpha=0.9)
         )
         self.draw()
 
@@ -316,8 +409,17 @@ class CalibrationUI(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("X-Axis Calibration")
-        self.setMinimumSize(1100, 750)
+        # Enable minimize and maximize buttons
+        self.setWindowFlags(
+            Qt.Window |
+            Qt.WindowMinimizeButtonHint |
+            Qt.WindowMaximizeButtonHint |
+            Qt.WindowCloseButtonHint
+        )
+        self.setMinimumSize(600, 450)
         self.resize(1200, 800)
+        # Apply unified dark theme
+        self.setStyleSheet(get_stylesheet())
 
         # Calibration processor
         self.processor = CalibrationProcessor()
@@ -340,7 +442,8 @@ class CalibrationUI(QDialog):
 
         # Title
         title = QLabel("X-Axis Wavenumber Calibration")
-        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setFont(QFont("Segoe UI", Fonts.SIZE_XXL, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; padding: 10px;")
         title.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title)
 
@@ -354,14 +457,14 @@ class CalibrationUI(QDialog):
 
         # Step indicator
         self.lbl_step = QLabel("Step 1: Select Neon-Argon Reference Peaks")
-        self.lbl_step.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        self.lbl_step.setStyleSheet("color: #4C8BF5;")
+        self.lbl_step.setFont(QFont("Segoe UI", Fonts.SIZE_LG, QFont.Bold))
+        self.lbl_step.setStyleSheet(f"color: {Colors.PRIMARY}; padding: 5px 0;")
         left_layout.addWidget(self.lbl_step)
 
         # Instructions
         self.lbl_instructions = QLabel("")
         self.lbl_instructions.setWordWrap(True)
-        self.lbl_instructions.setStyleSheet("color: #888; margin-bottom: 10px;")
+        self.lbl_instructions.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; margin-bottom: 10px; font-size: {Fonts.SIZE_BASE}px;")
         left_layout.addWidget(self.lbl_instructions)
 
         # Stacked widget for different steps (instead of tabs)
@@ -418,7 +521,7 @@ class CalibrationUI(QDialog):
         self.input_wavelength.setValue(785.000)
         known_layout.addWidget(self.input_wavelength)
         self.btn_use_known = QPushButton("Use This Wavelength")
-        self.btn_use_known.setStyleSheet("background: #28a745; color: white; font-weight: bold;")
+        self.btn_use_known.setProperty("class", "success")
         self.btn_use_known.clicked.connect(self._use_known_wavelength)
         known_layout.addWidget(self.btn_use_known)
         wavelength_layout.addWidget(known_group)
@@ -477,9 +580,7 @@ class CalibrationUI(QDialog):
         calibrate_layout.addWidget(self.lbl_summary)
 
         self.btn_calibrate = QPushButton("Run Calibration")
-        self.btn_calibrate.setStyleSheet(
-            "background: #4C8BF5; color: white; font-weight: bold; padding: 10px;"
-        )
+        self.btn_calibrate.setProperty("class", "primary")
         self.btn_calibrate.clicked.connect(self._run_calibration)
         calibrate_layout.addWidget(self.btn_calibrate)
 
@@ -492,9 +593,7 @@ class CalibrationUI(QDialog):
         calibrate_layout.addWidget(self.lbl_result)
 
         self.btn_save = QPushButton("Save Calibration (.mat)")
-        self.btn_save.setStyleSheet(
-            "background: #28a745; color: white; font-weight: bold; padding: 10px;"
-        )
+        self.btn_save.setProperty("class", "success")
         self.btn_save.clicked.connect(self._save_calibration)
         self.btn_save.setEnabled(False)
         calibrate_layout.addWidget(self.btn_save)
@@ -549,7 +648,7 @@ class CalibrationUI(QDialog):
         bottom_layout.addWidget(btn_cancel)
 
         self.btn_finish = QPushButton("Finish")
-        self.btn_finish.setStyleSheet("background: #4C8BF5; color: white;")
+        self.btn_finish.setProperty("class", "primary")
         self.btn_finish.clicked.connect(self.accept)
         self.btn_finish.setEnabled(False)
         bottom_layout.addWidget(self.btn_finish)
@@ -920,45 +1019,8 @@ class CalibrationUI(QDialog):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    # Apply dark theme
-    app.setStyleSheet("""
-        QWidget {
-            font-family: 'Segoe UI';
-            color: #EAEAEA;
-            background: #121212;
-        }
-        QGroupBox {
-            font-weight: bold;
-            border: 1px solid #333;
-            border-radius: 8px;
-            margin-top: 12px;
-            padding-top: 8px;
-        }
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 12px;
-            padding: 0 6px;
-        }
-        QPushButton {
-            background: #1F1F1F;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 6px;
-        }
-        QPushButton:hover { background: #2A2A2A; }
-        QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-            background: #1F1F1F;
-            border: 1px solid #333;
-            border-radius: 4px;
-            padding: 6px;
-        }
-        QCheckBox {
-            spacing: 6px;
-        }
-        QScrollArea {
-            border: none;
-        }
-    """)
+    # Apply unified dark theme
+    app.setStyleSheet(get_stylesheet())
 
     dlg = CalibrationUI()
     dlg.exec_()

@@ -54,6 +54,7 @@ def main():
 
     # Connect wizard to shell for step synchronization
     wizard._shell_sync = shell.set_active_step
+    wizard._shell = shell  # For step skipping functionality
 
     shell.setWindowTitle("TRaP - Raman Processing Application")
     shell.resize(1024, 680)

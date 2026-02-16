@@ -1,0 +1,21 @@
+# Compiled/build output
+dist/
+build/
+*.spec
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Visual Studio
+.vs/
+
+# Data files
+data/
+
+# Config files (may contain local paths)
+configs/
+
+# Batch files
+*.bat

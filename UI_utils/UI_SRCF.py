@@ -28,7 +28,8 @@ from scipy.io import loadmat
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout,
     QMessageBox, QFileDialog, QFrame, QGroupBox, QGridLayout,
-    QComboBox, QSpinBox, QDoubleSpinBox, QSplitter, QWidget, QStatusBar
+    QComboBox, QSpinBox, QDoubleSpinBox, QSplitter, QWidget, QStatusBar,
+    QScrollArea, QSizePolicy
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
@@ -41,6 +42,7 @@ from utils.WLCorrection import (
     read_vector_file, read_2col_file,
     wl_correction_from_true_and_measured, nist_correction_from_srm
 )
+from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
 
 
 class SRCF_UI(QDialog):
@@ -49,8 +51,17 @@ class SRCF_UI(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Spectral Response Correction Factor")
-        self.setMinimumSize(1000, 700)
+        # Enable minimize and maximize buttons
+        self.setWindowFlags(
+            Qt.Window |
+            Qt.WindowMinimizeButtonHint |
+            Qt.WindowMaximizeButtonHint |
+            Qt.WindowCloseButtonHint
+        )
+        self.setMinimumSize(600, 450)
         self.resize(1100, 750)
+        # Apply unified dark theme
+        self.setStyleSheet(get_stylesheet())
 
         # ============ Data and State ============
         self.result = None
@@ -89,23 +100,46 @@ class SRCF_UI(QDialog):
     def _build_ui(self):
         """Build the main UI layout."""
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(6)
 
         # Title
         title = QLabel("Spectral Response Correction Factor")
-        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setFont(QFont("Segoe UI", Fonts.SIZE_XL, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; padding: 6px;")
         title.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title)
 
         # Create splitter for left panel and right chart
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
 
-        # ============ Left Panel - Controls ============
+        # ============ Left Panel - Controls (wrapped in ScrollArea) ============
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setMinimumWidth(280)
+        left_scroll.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        left_scroll.setStyleSheet("""
+            QScrollArea { background: transparent; border: none; }
+            QScrollBar:vertical {
+                background: transparent;
+                width: 6px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: #444;
+                border-radius: 3px;
+                min-height: 20px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+        """)
+
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(5, 5, 5, 5)
-        left_layout.setSpacing(8)
+        left_layout.setSpacing(6)
 
         # ---------- Step 1: Method Selection ----------
         method_group = QGroupBox("Step 1: Select Correction Method")
@@ -310,8 +344,6 @@ class SRCF_UI(QDialog):
         save_layout.addWidget(self.btn_save_spectrum)
         left_layout.addWidget(save_group)
 
-        left_layout.addStretch()
-
         # ---------- Bottom Buttons ----------
         bottom_layout = QHBoxLayout()
         btn_cancel = QPushButton("Cancel")
@@ -326,26 +358,36 @@ class SRCF_UI(QDialog):
         bottom_layout.addWidget(self.btn_ok)
         left_layout.addLayout(bottom_layout)
 
+        # Set left_widget as the scroll area's widget
+        left_scroll.setWidget(left_widget)
+
         # ============ Right Panel - Charts ============
         right_widget = QWidget()
+        right_widget.setMinimumWidth(300)
+        right_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(5, 5, 5, 5)
 
-        # Matplotlib figure with two subplots
-        self.fig = Figure(figsize=(8, 6), dpi=100)
+        # Matplotlib figure with two subplots (dark theme)
+        self.fig = Figure(figsize=(6, 5), dpi=100)
+        self.fig.set_facecolor(Colors.BG_SECONDARY)
         self.ax_corr = self.fig.add_subplot(211)
         self.ax_compare = self.fig.add_subplot(212)
-        self.fig.tight_layout(pad=3.0)
+        self._style_axes()
+        self.fig.tight_layout(pad=2.5)
 
         self.canvas = FigureCanvas(self.fig)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.toolbar = NavigationToolbar(self.canvas, self)
 
         right_layout.addWidget(self.toolbar)
         right_layout.addWidget(self.canvas)
 
         # Add widgets to splitter
-        splitter.addWidget(left_widget)
+        splitter.addWidget(left_scroll)
         splitter.addWidget(right_widget)
+        splitter.setStretchFactor(0, 1)  # Left panel stretch factor
+        splitter.setStretchFactor(1, 2)  # Right panel stretch factor (larger)
         splitter.setSizes([350, 650])
 
         main_layout.addWidget(splitter)
@@ -354,6 +396,17 @@ class SRCF_UI(QDialog):
         self.status_bar = QStatusBar()
         self.status_bar.showMessage("Ready. Select a correction method to begin.")
         main_layout.addWidget(self.status_bar)
+
+    def _style_axes(self):
+        """Apply dark theme styling to matplotlib axes."""
+        for ax in [self.ax_corr, self.ax_compare]:
+            ax.set_facecolor(Colors.BG_TERTIARY)
+            ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
+            ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
+            for spine in ax.spines.values():
+                spine.set_color(Colors.BORDER)
+        self.ax_corr.set_title("Correction Factor", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_compare.set_title("Spectrum Comparison", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
 
     # ============================================================
     # Method Selection

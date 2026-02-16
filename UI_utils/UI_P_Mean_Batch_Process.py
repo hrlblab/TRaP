@@ -34,6 +34,8 @@ from utils.SpectralPreprocess import (
     SpectralResponseCorrection, subtractBaseline,
     FluorescenceBackgroundSubtraction
 )
+from UI_utils.UI_Config_Manager_v2 import ConfigManager
+from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
 
 
 def default_config() -> dict:
@@ -71,11 +73,20 @@ def save_config_file(config: dict, config_file: str):
         json.dump(config, f, indent=2, ensure_ascii=False)
 
 
-def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config: dict):
-    """P-Mean pipeline using config parameters."""
+def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config: dict, skip_wl_correction: bool = False):
+    """P-Mean pipeline using config parameters.
+
+    Args:
+        data: Raw spectrum data
+        wl_corr: WL correction factor (ignored if skip_wl_correction=True)
+        wvn: Wavenumber array
+        config: Processing configuration
+        skip_wl_correction: If True, skip spectral response correction (for Renishaw)
+    """
     # 1) Baseline, response correction, cosmic ray removal
     spect = subtractBaseline(data)
-    spect = SpectralResponseCorrection(wl_corr, spect)
+    if not skip_wl_correction and wl_corr is not None:
+        spect = SpectralResponseCorrection(wl_corr, spect)
     spect = CosmicRayRemoval(spect)
 
     # 2) Truncate
@@ -83,7 +94,9 @@ def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, confi
     stop = float(config.get("Stop", 1700))
     wvn_trunc, spect_trunc = Truncate(start, stop, wvn, spect)
 
-    # 3) Binning
+    # 3) Binning - flatten arrays to ensure 1D input
+    wvn_trunc = wvn_trunc.flatten()
+    spect_trunc = spect_trunc.flatten()
     binwidth = float(config.get("BinWidth", 3.5))
     binned_spect, new_wvn = Binning(wvn_trunc[0], wvn_trunc[-1], wvn_trunc, spect_trunc, binwidth=binwidth)
 
@@ -119,13 +132,14 @@ class BatchWorker(QThread):
     finished = pyqtSignal(list, int)  # processed_files, fail_count
     log = pyqtSignal(str, str)  # message, level (info/error/success)
 
-    def __init__(self, data_files, wl_corr, wvn, config, output_folder):
+    def __init__(self, data_files, wl_corr, wvn, config, output_folder, is_renishaw=False):
         super().__init__()
         self.data_files = data_files
         self.wl_corr = wl_corr
         self.wvn = wvn
         self.config = config
         self.output_folder = output_folder
+        self.is_renishaw = is_renishaw
         self._is_cancelled = False
 
     def cancel(self):
@@ -167,15 +181,29 @@ class BatchWorker(QThread):
                     arr = np.asarray(data_df)
                 arr = np.asarray(arr, dtype=np.float64)
 
-                if arr.ndim == 2:
-                    if arr.shape[1] == 1:
-                        raw_spec = arr.ravel()
+                if self.is_renishaw:
+                    # Renishaw: data file contains [wavenumber, intensity]
+                    if arr.ndim == 2 and arr.shape[1] >= 2:
+                        file_wvn = arr[:, 0].flatten()
+                        raw_spec = arr[:, 1].flatten()
                     else:
-                        raw_spec = arr.mean(axis=1)
+                        raw_spec = arr.ravel()
+                        file_wvn = self.wvn  # fallback to provided wvn
+                    new_wvn, processed_spec = p_mean_process(
+                        raw_spec, None, file_wvn, self.config, skip_wl_correction=True
+                    )
                 else:
-                    raw_spec = arr.ravel()
-
-                new_wvn, processed_spec = p_mean_process(raw_spec, self.wl_corr, self.wvn, self.config)
+                    # Non-Renishaw: single column intensity data
+                    if arr.ndim == 2:
+                        if arr.shape[1] == 1:
+                            raw_spec = arr.ravel()
+                        else:
+                            raw_spec = arr.mean(axis=1)
+                    else:
+                        raw_spec = arr.ravel()
+                    new_wvn, processed_spec = p_mean_process(
+                        raw_spec, self.wl_corr, self.wvn, self.config, skip_wl_correction=False
+                    )
                 output_data = np.column_stack((new_wvn, processed_spec))
 
                 prefix = os.path.basename(path)
@@ -195,11 +223,11 @@ class BatchWorker(QThread):
 
 
 class PreviewCanvas(FigureCanvas):
-    """Canvas for preview plot."""
+    """Canvas for preview plot with dark theme."""
 
     def __init__(self, parent=None, width=6, height=4, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
-        self.fig.set_facecolor('#f8f9fa')
+        self.fig.set_facecolor(Colors.BG_SECONDARY)
         self.ax = self.fig.add_subplot(111)
         super().__init__(self.fig)
         self.setParent(parent)
@@ -207,28 +235,31 @@ class PreviewCanvas(FigureCanvas):
         self._style_axis()
 
     def _style_axis(self):
-        self.ax.set_facecolor('#ffffff')
-        self.ax.grid(True, alpha=0.3, linestyle='--')
-        self.ax.set_title("Preview", fontsize=11, fontweight='bold')
+        self.ax.set_facecolor(Colors.BG_TERTIARY)
+        self.ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
+        self.ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
+        for spine in self.ax.spines.values():
+            spine.set_color(Colors.BORDER)
+        self.ax.set_title("Preview", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
 
     def plot_preview(self, wvn_before, spect_before, wvn_after, spect_after, filename=""):
         self.ax.clear()
+        self._style_axis()
 
         if wvn_before is not None and len(wvn_before) == len(spect_before):
-            self.ax.plot(wvn_before, spect_before, 'b-', linewidth=1, alpha=0.5, label='Raw')
+            self.ax.plot(wvn_before, spect_before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.6, label='Raw')
         else:
-            self.ax.plot(spect_before, 'b-', linewidth=1, alpha=0.5, label='Raw')
+            self.ax.plot(spect_before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.6, label='Raw')
 
         if wvn_after is not None and len(wvn_after) == len(spect_after):
-            self.ax.plot(wvn_after, spect_after, 'r-', linewidth=1.2, label='Processed')
+            self.ax.plot(wvn_after, spect_after, color=Colors.SUCCESS, linewidth=1.5, label='Processed')
         else:
-            self.ax.plot(spect_after, 'r-', linewidth=1.2, label='Processed')
+            self.ax.plot(spect_after, color=Colors.SUCCESS, linewidth=1.5, label='Processed')
 
-        self.ax.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=10)
-        self.ax.set_ylabel("Intensity", fontsize=10)
-        self.ax.set_title(f"Preview: {filename}", fontsize=11, fontweight='bold')
-        self.ax.grid(True, alpha=0.3, linestyle='--')
-        self.ax.legend(loc='best', fontsize=9)
+        self.ax.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=12, color=Colors.TEXT_SECONDARY)
+        self.ax.set_ylabel("Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
+        self.ax.set_title(f"Preview: {filename}", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax.legend(loc='best', fontsize=11, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
         self.fig.tight_layout()
         self.draw()
 
@@ -243,122 +274,12 @@ class BatchPMeanUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("Batch P_Mean Processing - Enhanced")
         self.setGeometry(100, 100, 1200, 800)
-        self.setStyleSheet("""
-            QMainWindow { background-color: #f5f6f8; }
-            QGroupBox {
-                font-weight: 600;
-                font-size: 13px;
-                border: 2px solid #e0e0e0;
-                border-radius: 8px;
-                margin-top: 14px;
-                padding: 12px 8px 8px 8px;
-                background-color: #ffffff;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 8px;
-                color: #1a73e8;
-            }
-            QPushButton {
-                padding: 10px 18px;
-                border-radius: 6px;
-                border: 2px solid #dadce0;
-                background-color: #ffffff;
-                color: #3c4043;
-                font-size: 13px;
-                font-weight: 500;
-                min-height: 20px;
-            }
-            QPushButton:hover {
-                background-color: #f1f3f4;
-                border-color: #c6c9cc;
-            }
-            QPushButton:pressed { background-color: #e8eaed; }
-            QPushButton:disabled {
-                background-color: #f1f3f4;
-                color: #9aa0a6;
-                border-color: #e8eaed;
-            }
-            QPushButton[class="primary"] {
-                background-color: #1a73e8;
-                color: white;
-                border: none;
-                font-weight: 600;
-            }
-            QPushButton[class="primary"]:hover { background-color: #1557b0; }
-            QPushButton[class="success"] {
-                background-color: #1e8e3e;
-                color: white;
-                border: none;
-                font-weight: 600;
-            }
-            QPushButton[class="success"]:hover { background-color: #137333; }
-            QPushButton[class="info"] {
-                background-color: #1a73e8;
-                color: white;
-                border: none;
-            }
-            QPushButton[class="info"]:hover { background-color: #1557b0; }
-            QPushButton[class="danger"] {
-                background-color: #d93025;
-                color: white;
-                border: none;
-            }
-            QPushButton[class="danger"]:hover { background-color: #b31412; }
-            QLineEdit {
-                padding: 8px 10px;
-                border: 2px solid #dadce0;
-                border-radius: 6px;
-                background-color: #ffffff;
-                font-size: 13px;
-                color: #202124;
-            }
-            QLineEdit:focus { border-color: #1a73e8; }
-            QComboBox {
-                padding: 8px 10px;
-                border: 2px solid #dadce0;
-                border-radius: 6px;
-                background-color: #ffffff;
-                font-size: 13px;
-                color: #202124;
-            }
-            QComboBox:focus { border-color: #1a73e8; }
-            QTextEdit {
-                border: 2px solid #dadce0;
-                border-radius: 6px;
-                background-color: #ffffff;
-                font-family: 'Consolas', 'Monaco', monospace;
-                font-size: 11px;
-                padding: 8px;
-            }
-            QProgressBar {
-                border: 2px solid #dadce0;
-                border-radius: 6px;
-                text-align: center;
-                background-color: #f1f3f4;
-                font-weight: 500;
-            }
-            QProgressBar::chunk {
-                background-color: #1e8e3e;
-                border-radius: 4px;
-            }
-            QListWidget {
-                border: 2px solid #dadce0;
-                border-radius: 6px;
-                background-color: #ffffff;
-                padding: 4px;
-            }
-            QListWidget::item {
-                padding: 6px;
-                border-radius: 4px;
-            }
-            QListWidget::item:selected {
-                background-color: #e8f0fe;
-                color: #1a73e8;
-            }
-            QLabel { color: #3c4043; }
-        """)
+
+        # Get current system from config
+        self.config_manager = ConfigManager()
+        self.current_system = self.config_manager.params.get("System", "")
+        # Apply unified dark theme
+        self.setStyleSheet(get_stylesheet())
 
         # State
         self.data_files = []
@@ -390,11 +311,17 @@ class BatchPMeanUI(QMainWindow):
         # Parameters Group
         params_group = QGroupBox("Processing Parameters")
         params_form = QFormLayout(params_group)
+        params_form.setSpacing(8)
+        params_form.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
         self.edit_start = QLineEdit(str(self.config["Start"]))
+        self.edit_start.setMinimumHeight(32)
         self.edit_stop = QLineEdit(str(self.config["Stop"]))
+        self.edit_stop.setMinimumHeight(32)
         self.edit_poly = QLineEdit(str(self.config["Polyorder"]))
+        self.edit_poly.setMinimumHeight(32)
         self.edit_binw = QLineEdit(str(self.config["BinWidth"]))
+        self.edit_binw.setMinimumHeight(32)
 
         self.edit_start.textChanged.connect(self._mark_config_modified)
         self.edit_stop.textChanged.connect(self._mark_config_modified)
@@ -412,12 +339,17 @@ class BatchPMeanUI(QMainWindow):
         self.combo_denoise.setCurrentText(self.config.get("DenoiseMethod", "Savitzky-Golay"))
         self.combo_denoise.currentIndexChanged.connect(self._update_denoise_visibility)
         self.combo_denoise.currentIndexChanged.connect(self._mark_config_modified)
+        self.combo_denoise.setMinimumHeight(32)
         params_form.addRow("Denoise Method:", self.combo_denoise)
 
         self.edit_sgorder = QLineEdit(str(self.config["SGorder"]))
+        self.edit_sgorder.setMinimumHeight(32)
         self.edit_sgframe = QLineEdit(str(self.config["SGframe"]))
+        self.edit_sgframe.setMinimumHeight(32)
         self.edit_mawin = QLineEdit(str(self.config["MAWindow"]))
+        self.edit_mawin.setMinimumHeight(32)
         self.edit_medk = QLineEdit(str(self.config["MedianKernel"]))
+        self.edit_medk.setMinimumHeight(32)
 
         self.lbl_sgorder = QLabel("SG Order:")
         self.lbl_sgframe = QLabel("SG Frame:")
@@ -431,12 +363,16 @@ class BatchPMeanUI(QMainWindow):
 
         # Config buttons
         cfg_btns = QHBoxLayout()
-        btn_load_cfg = QPushButton("Load Config")
+        cfg_btns.setSpacing(6)
+        btn_load_cfg = QPushButton("Load")
         btn_load_cfg.clicked.connect(self.on_load_config)
-        btn_save_cfg = QPushButton("Save Config")
+        btn_load_cfg.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        btn_save_cfg = QPushButton("Save")
         btn_save_cfg.clicked.connect(self.on_save_config)
-        btn_reset_cfg = QPushButton("Reset Default")
+        btn_save_cfg.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        btn_reset_cfg = QPushButton("Reset")
         btn_reset_cfg.clicked.connect(self.on_reset_config)
+        btn_reset_cfg.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         cfg_btns.addWidget(btn_load_cfg)
         cfg_btns.addWidget(btn_save_cfg)
         cfg_btns.addWidget(btn_reset_cfg)
@@ -447,10 +383,28 @@ class BatchPMeanUI(QMainWindow):
         # Files Group
         files_group = QGroupBox("Input Files")
         files_layout = QVBoxLayout(files_group)
+        files_layout.setSpacing(8)
+
+        # System info label
+        is_renishaw = self._is_renishaw_system()
+        system_text = f"System: {self.current_system}"
+        if is_renishaw:
+            system_text += " (WL Correction & Calibration not required)"
+        self.lbl_system_info = QLabel(system_text)
+        self.lbl_system_info.setWordWrap(True)
+        self.lbl_system_info.setStyleSheet(
+            f"color: {Colors.SUCCESS}; font-weight: bold; padding: 10px; "
+            f"background-color: {Colors.SUCCESS_BG}; border-radius: 8px; font-size: {Fonts.SIZE_BASE}px;"
+            if is_renishaw else
+            f"color: {Colors.PRIMARY}; font-weight: bold; padding: 10px; "
+            f"background-color: {Colors.PRIMARY_MUTED}; border-radius: 8px; font-size: {Fonts.SIZE_BASE}px;"
+        )
+        files_layout.addWidget(self.lbl_system_info)
 
         # Data files
         btn_select_data = QPushButton("Select Data Files (Raw Spectrum)")
         btn_select_data.clicked.connect(self.on_select_data)
+        btn_select_data.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         files_layout.addWidget(btn_select_data)
 
         self.list_data = QListWidget()
@@ -461,34 +415,51 @@ class BatchPMeanUI(QMainWindow):
         self.lbl_data_count.setStyleSheet("color: #6c757d; font-style: italic;")
         files_layout.addWidget(self.lbl_data_count)
 
-        # WL Correction
-        wl_layout = QHBoxLayout()
-        btn_select_wlcorr = QPushButton("Select WL Correction")
-        btn_select_wlcorr.clicked.connect(self.on_select_wlcorr)
-        wl_layout.addWidget(btn_select_wlcorr)
+        # WL Correction (container widget for visibility control)
+        self.wl_widget = QWidget()
+        wl_layout = QHBoxLayout(self.wl_widget)
+        wl_layout.setContentsMargins(0, 0, 0, 0)
+        wl_layout.setSpacing(8)
+        self.btn_select_wlcorr = QPushButton("Select WL Correction")
+        self.btn_select_wlcorr.clicked.connect(self.on_select_wlcorr)
+        self.btn_select_wlcorr.setMinimumWidth(160)
+        wl_layout.addWidget(self.btn_select_wlcorr)
         self.lbl_wlcorr = QLabel("Not selected")
         self.lbl_wlcorr.setStyleSheet("color: #dc3545;")
+        self.lbl_wlcorr.setWordWrap(True)
         wl_layout.addWidget(self.lbl_wlcorr, 1)
-        files_layout.addLayout(wl_layout)
+        files_layout.addWidget(self.wl_widget)
 
-        # Calibration
-        cal_layout = QHBoxLayout()
-        btn_select_wvn = QPushButton("Select Calibration (.mat)")
-        btn_select_wvn.clicked.connect(self.on_select_wvn)
-        cal_layout.addWidget(btn_select_wvn)
+        # Calibration (container widget for visibility control)
+        self.cal_widget = QWidget()
+        cal_layout = QHBoxLayout(self.cal_widget)
+        cal_layout.setContentsMargins(0, 0, 0, 0)
+        cal_layout.setSpacing(8)
+        self.btn_select_wvn = QPushButton("Select Calibration (.mat)")
+        self.btn_select_wvn.clicked.connect(self.on_select_wvn)
+        self.btn_select_wvn.setMinimumWidth(160)
+        cal_layout.addWidget(self.btn_select_wvn)
         self.lbl_wvn = QLabel("Not selected")
         self.lbl_wvn.setStyleSheet("color: #dc3545;")
+        self.lbl_wvn.setWordWrap(True)
         cal_layout.addWidget(self.lbl_wvn, 1)
-        files_layout.addLayout(cal_layout)
+        files_layout.addWidget(self.cal_widget)
+
+        # Hide WL/Cal widgets for Renishaw
+        self.wl_widget.setVisible(not is_renishaw)
+        self.cal_widget.setVisible(not is_renishaw)
 
         # Output folder
         out_layout = QHBoxLayout()
+        out_layout.setSpacing(8)
         btn_select_output = QPushButton("Output Folder")
         btn_select_output.clicked.connect(self.on_select_output)
+        btn_select_output.setMinimumWidth(120)
         out_layout.addWidget(btn_select_output)
         self.edit_output = QLineEdit()
         self.edit_output.setReadOnly(True)
         self.edit_output.setPlaceholderText("Auto: ./Processed")
+        self.edit_output.setMinimumHeight(32)
         out_layout.addWidget(self.edit_output, 1)
         files_layout.addLayout(out_layout)
 
@@ -497,21 +468,25 @@ class BatchPMeanUI(QMainWindow):
         # Actions Group
         actions_group = QGroupBox("Actions")
         actions_layout = QVBoxLayout(actions_group)
+        actions_layout.setSpacing(8)
 
         self.btn_preview = QPushButton("Preview First File")
         self.btn_preview.setProperty("class", "info")
         self.btn_preview.clicked.connect(self.on_preview)
+        self.btn_preview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         actions_layout.addWidget(self.btn_preview)
 
         self.btn_start = QPushButton("Start Batch Process")
         self.btn_start.setProperty("class", "success")
         self.btn_start.clicked.connect(self.on_start_batch)
+        self.btn_start.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         actions_layout.addWidget(self.btn_start)
 
         self.btn_cancel = QPushButton("Cancel")
         self.btn_cancel.setProperty("class", "danger")
         self.btn_cancel.clicked.connect(self.on_cancel)
         self.btn_cancel.setEnabled(False)
+        self.btn_cancel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         actions_layout.addWidget(self.btn_cancel)
 
         left_layout.addWidget(actions_group)
@@ -554,10 +529,13 @@ class BatchPMeanUI(QMainWindow):
         log_layout.addWidget(self.log_text)
 
         log_btns = QHBoxLayout()
+        log_btns.setSpacing(8)
         btn_clear_log = QPushButton("Clear Log")
         btn_clear_log.clicked.connect(self.log_text.clear)
+        btn_clear_log.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         btn_export_log = QPushButton("Export Log")
         btn_export_log.clicked.connect(self.on_export_log)
+        btn_export_log.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         log_btns.addWidget(btn_clear_log)
         log_btns.addWidget(btn_export_log)
         log_btns.addStretch()
@@ -568,6 +546,10 @@ class BatchPMeanUI(QMainWindow):
         # Add to main
         main_layout.addWidget(left_panel)
         main_layout.addWidget(right_panel, 1)
+
+    def _is_renishaw_system(self):
+        """Check if current system is Renishaw."""
+        return self.current_system.lower() == "renishaw"
 
     def _mark_config_modified(self):
         self.config_modified = True
@@ -635,20 +617,31 @@ class BatchPMeanUI(QMainWindow):
         self.log_text.moveCursor(QTextCursor.End)
 
     def _load_support_files(self) -> bool:
-        """Load WL correction and calibration files into cache."""
+        """Load WL correction and calibration files into cache.
+        For Renishaw systems, these are not required."""
+        is_renishaw = self._is_renishaw_system()
+
+        if is_renishaw:
+            # Renishaw doesn't need WL correction or calibration files
+            self.cached_wl_corr = None
+            self.cached_wvn = None
+            return True
+
+        # Non-Renishaw: require both files
         if not self.wlcorr_file or not self.wvn_file:
             return False
 
         try:
-            wl_corr_df = rdata.read_txt_file(self.wlcorr_file, delimiter=',', header=None)
+            # Load WL correction - keep 2D structure for SpectralResponseCorrection
+            wl_corr_df = rdata.read_txt_file(self.wlcorr_file)
             if wl_corr_df is None:
                 raise ValueError("WL correction read failed")
             if hasattr(wl_corr_df, "to_numpy"):
-                self.cached_wl_corr = wl_corr_df.to_numpy().astype(np.float64).ravel()
+                self.cached_wl_corr = wl_corr_df.to_numpy().astype(np.float64)
             else:
-                self.cached_wl_corr = np.asarray(wl_corr_df, dtype=np.float64).ravel()
+                self.cached_wl_corr = np.asarray(wl_corr_df, dtype=np.float64)
 
-            self.cached_wvn = rdata.getwvnfrompath(self.wvn_file).astype(np.float64).ravel()
+            self.cached_wvn = rdata.getwvnfrompath(self.wvn_file).flatten().astype(np.float64)
             return True
 
         except Exception as e:
@@ -733,10 +726,14 @@ class BatchPMeanUI(QMainWindow):
 
     def on_preview(self):
         """Preview processing on first file."""
+        is_renishaw = self._is_renishaw_system()
+
         if not self.data_files:
             QMessageBox.warning(self, "Error", "No data files selected")
             return
-        if not self.wlcorr_file or not self.wvn_file:
+
+        # For non-Renishaw, require WL correction and calibration files
+        if not is_renishaw and (not self.wlcorr_file or not self.wvn_file):
             QMessageBox.warning(self, "Error", "WL Correction and Calibration files required")
             return
 
@@ -758,15 +755,31 @@ class BatchPMeanUI(QMainWindow):
                 arr = np.asarray(data_df)
             arr = np.asarray(arr, dtype=np.float64)
 
-            if arr.ndim == 2:
-                raw_spec = arr.ravel() if arr.shape[1] == 1 else arr.mean(axis=1)
+            if is_renishaw:
+                # Renishaw: data contains [wavenumber, intensity]
+                if arr.ndim == 2 and arr.shape[1] >= 2:
+                    file_wvn = arr[:, 0].flatten()
+                    raw_spec = arr[:, 1].flatten()
+                else:
+                    raw_spec = arr.ravel()
+                    file_wvn = np.arange(len(raw_spec), dtype=np.float64)
+                new_wvn, processed_spec = p_mean_process(
+                    raw_spec, None, file_wvn, cfg, skip_wl_correction=True
+                )
+                wvn_for_plot = file_wvn
             else:
-                raw_spec = arr.ravel()
-
-            new_wvn, processed_spec = p_mean_process(raw_spec, self.cached_wl_corr, self.cached_wvn, cfg)
+                # Non-Renishaw: single column intensity
+                if arr.ndim == 2:
+                    raw_spec = arr.ravel() if arr.shape[1] == 1 else arr.mean(axis=1)
+                else:
+                    raw_spec = arr.ravel()
+                new_wvn, processed_spec = p_mean_process(
+                    raw_spec, self.cached_wl_corr, self.cached_wvn, cfg, skip_wl_correction=False
+                )
+                wvn_for_plot = self.cached_wvn
 
             self.preview_canvas.plot_preview(
-                self.cached_wvn, raw_spec,
+                wvn_for_plot, raw_spec,
                 new_wvn, processed_spec,
                 os.path.basename(path)
             )
@@ -778,10 +791,14 @@ class BatchPMeanUI(QMainWindow):
 
     def on_start_batch(self):
         """Start batch processing."""
+        is_renishaw = self._is_renishaw_system()
+
         if not self.data_files:
             QMessageBox.warning(self, "Error", "No data files selected")
             return
-        if not self.wlcorr_file or not self.wvn_file:
+
+        # For non-Renishaw, require WL correction and calibration files
+        if not is_renishaw and (not self.wlcorr_file or not self.wvn_file):
             QMessageBox.warning(self, "Error", "WL Correction and Calibration files required")
             return
 
@@ -808,12 +825,13 @@ class BatchPMeanUI(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setMaximum(len(self.data_files))
 
-        self._log(f"Starting batch processing: {len(self.data_files)} files", "info")
+        system_info = " (Renishaw mode - no WL correction)" if is_renishaw else ""
+        self._log(f"Starting batch processing: {len(self.data_files)} files{system_info}", "info")
 
         # Start worker
         self.worker = BatchWorker(
             self.data_files, self.cached_wl_corr, self.cached_wvn,
-            cfg, output_folder
+            cfg, output_folder, is_renishaw=is_renishaw
         )
         self.worker.progress.connect(self._on_progress)
         self.worker.log.connect(self._log)

@@ -31,7 +31,8 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.figure import Figure
 from scipy.signal import medfilt
 
-from UI_utils.UI_Config_Manager import ConfigManager
+from UI_utils.UI_Config_Manager_v2 import ConfigManager
+from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
 from utils.SpectralPreprocess import (
     Binning, Denoise, Truncate, CosmicRayRemoval,
     SpectralResponseCorrection, subtractBaseline,
@@ -56,7 +57,7 @@ class DualPlotCanvas(FigureCanvas):
 
     def __init__(self, parent=None, width=10, height=8, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
-        self.fig.set_facecolor('#f8f9fa')
+        self.fig.set_facecolor(Colors.BG_SECONDARY)
 
         # Create subplots
         self.ax_current = self.fig.add_subplot(211)
@@ -69,75 +70,87 @@ class DualPlotCanvas(FigureCanvas):
         self._style_axes()
 
     def _style_axes(self):
-        """Apply consistent styling to axes."""
+        """Apply consistent dark theme styling to axes."""
         for ax in [self.ax_current, self.ax_compare]:
-            ax.set_facecolor('#ffffff')
-            ax.grid(True, alpha=0.3, linestyle='--')
-            ax.tick_params(labelsize=9)
+            ax.set_facecolor(Colors.BG_TERTIARY)
+            ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
+            ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
+            ax.spines['bottom'].set_color(Colors.BORDER)
+            ax.spines['top'].set_color(Colors.BORDER)
+            ax.spines['left'].set_color(Colors.BORDER)
+            ax.spines['right'].set_color(Colors.BORDER)
 
-        self.ax_current.set_title("Current Spectrum", fontsize=11, fontweight='bold')
-        self.ax_compare.set_title("Processing Comparison", fontsize=11, fontweight='bold')
+        self.ax_current.set_title("Current Spectrum", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_compare.set_title("Processing Comparison", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
         self.fig.tight_layout(pad=2.0)
 
     def plot_current(self, wvn, spect, title=None):
         """Plot the current spectrum state."""
         self.ax_current.clear()
+        self._apply_ax_style(self.ax_current)
         if wvn is not None and len(wvn) == len(spect):
-            self.ax_current.plot(wvn, spect, 'b-', linewidth=1.2, label='Current')
-            self.ax_current.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=10)
+            self.ax_current.plot(wvn, spect, color=Colors.PRIMARY, linewidth=1.5, label='Current')
+            self.ax_current.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=12, color=Colors.TEXT_SECONDARY)
         else:
-            self.ax_current.plot(spect, 'b-', linewidth=1.2, label='Current')
-            self.ax_current.set_xlabel("Index", fontsize=10)
+            self.ax_current.plot(spect, color=Colors.PRIMARY, linewidth=1.5, label='Current')
+            self.ax_current.set_xlabel("Index", fontsize=12, color=Colors.TEXT_SECONDARY)
 
-        self.ax_current.set_ylabel("Intensity", fontsize=10)
-        self.ax_current.set_title(title or "Current Spectrum", fontsize=11, fontweight='bold')
-        self.ax_current.grid(True, alpha=0.3, linestyle='--')
-        self.ax_current.legend(loc='best', fontsize=9)
+        self.ax_current.set_ylabel("Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
+        self.ax_current.set_title(title or "Current Spectrum", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_current.legend(loc='best', fontsize=11, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
         self.fig.tight_layout(pad=2.0)
         self.draw()
+
+    def _apply_ax_style(self, ax):
+        """Apply dark theme styling to an axis."""
+        ax.set_facecolor(Colors.BG_TERTIARY)
+        ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
+        ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
+        for spine in ax.spines.values():
+            spine.set_color(Colors.BORDER)
 
     def plot_comparison(self, wvn, before, after, before_label="Before", after_label="After"):
         """Plot before/after comparison."""
         self.ax_compare.clear()
+        self._apply_ax_style(self.ax_compare)
 
         if wvn is not None and len(wvn) == len(before):
-            self.ax_compare.plot(wvn, before, 'b-', linewidth=1, alpha=0.6, label=before_label)
+            self.ax_compare.plot(wvn, before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.7, label=before_label)
             if after is not None and len(after) == len(wvn):
-                self.ax_compare.plot(wvn, after, 'r-', linewidth=1.2, label=after_label)
-            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=10)
+                self.ax_compare.plot(wvn, after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
+            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=12, color=Colors.TEXT_SECONDARY)
         else:
-            self.ax_compare.plot(before, 'b-', linewidth=1, alpha=0.6, label=before_label)
+            self.ax_compare.plot(before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.7, label=before_label)
             if after is not None:
-                self.ax_compare.plot(after, 'r-', linewidth=1.2, label=after_label)
-            self.ax_compare.set_xlabel("Index", fontsize=10)
+                self.ax_compare.plot(after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
+            self.ax_compare.set_xlabel("Index", fontsize=12, color=Colors.TEXT_SECONDARY)
 
-        self.ax_compare.set_ylabel("Intensity", fontsize=10)
-        self.ax_compare.set_title("Processing Comparison", fontsize=11, fontweight='bold')
-        self.ax_compare.grid(True, alpha=0.3, linestyle='--')
-        self.ax_compare.legend(loc='best', fontsize=9)
+        self.ax_compare.set_ylabel("Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
+        self.ax_compare.set_title("Processing Comparison", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_compare.legend(loc='best', fontsize=11, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
     def plot_polyfit(self, wvn, spect, baseline):
         """Plot spectrum with polyfit baseline."""
         self.ax_compare.clear()
+        self._apply_ax_style(self.ax_compare)
 
         if wvn is not None and len(wvn) == len(spect):
-            self.ax_compare.plot(wvn, spect, 'b-', linewidth=1.2, label='Spectrum')
-            self.ax_compare.plot(wvn, baseline, 'r--', linewidth=1.5, label='Polyfit Baseline')
-            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=10)
+            self.ax_compare.plot(wvn, spect, color=Colors.PRIMARY, linewidth=1.5, label='Spectrum')
+            self.ax_compare.plot(wvn, baseline, color=Colors.DANGER, linestyle='--', linewidth=1.8, label='Polyfit Baseline')
+            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=12, color=Colors.TEXT_SECONDARY)
         else:
-            self.ax_compare.plot(spect, 'b-', linewidth=1.2, label='Spectrum')
-            self.ax_compare.plot(baseline, 'r--', linewidth=1.5, label='Polyfit Baseline')
-            self.ax_compare.set_xlabel("Index", fontsize=10)
+            self.ax_compare.plot(spect, color=Colors.PRIMARY, linewidth=1.5, label='Spectrum')
+            self.ax_compare.plot(baseline, color=Colors.DANGER, linestyle='--', linewidth=1.8, label='Polyfit Baseline')
+            self.ax_compare.set_xlabel("Index", fontsize=12, color=Colors.TEXT_SECONDARY)
 
-        self.ax_compare.set_ylabel("Intensity", fontsize=10)
-        self.ax_compare.set_title("Polyfit Baseline Preview", fontsize=11, fontweight='bold')
-        self.ax_compare.grid(True, alpha=0.3, linestyle='--')
-        self.ax_compare.legend(loc='best', fontsize=9)
+        self.ax_compare.set_ylabel("Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
+        self.ax_compare.set_title("Polyfit Baseline Preview", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_compare.legend(loc='best', fontsize=11, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
         self.ax_compare.fill_between(
             wvn if wvn is not None and len(wvn) == len(spect) else range(len(spect)),
-            baseline, spect, alpha=0.15, color='green', label='Background'
+            baseline, spect, alpha=0.2, color=Colors.SUCCESS, label='Background'
         )
         self.fig.tight_layout(pad=2.0)
         self.draw()
@@ -180,16 +193,16 @@ class StepIndicator(QWidget):
         for i, (frame, label) in enumerate(self.step_labels):
             if i < self.current_index:
                 # Completed
-                frame.setStyleSheet("background-color: #28a745; border-radius: 3px;")
-                label.setStyleSheet("color: white; font-weight: bold;")
+                frame.setStyleSheet(f"background-color: {Colors.SUCCESS}; border-radius: 6px;")
+                label.setStyleSheet(f"color: {Colors.BG_DARK}; font-weight: bold; font-size: {Fonts.SIZE_XS}px;")
             elif i == self.current_index:
                 # Current
-                frame.setStyleSheet("background-color: #007bff; border-radius: 3px;")
-                label.setStyleSheet("color: white; font-weight: bold;")
+                frame.setStyleSheet(f"background-color: {Colors.PRIMARY}; border-radius: 6px;")
+                label.setStyleSheet(f"color: {Colors.BG_DARK}; font-weight: bold; font-size: {Fonts.SIZE_XS}px;")
             else:
                 # Pending
-                frame.setStyleSheet("background-color: #e9ecef; border-radius: 3px;")
-                label.setStyleSheet("color: #6c757d;")
+                frame.setStyleSheet(f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px;")
+                label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; font-size: {Fonts.SIZE_XS}px;")
 
     def set_step(self, index):
         self.current_index = min(max(0, index), len(self.steps))
@@ -203,128 +216,8 @@ class P_Mean_Process_UI(QMainWindow):
 
         self.setWindowTitle("Spectrum Data Process - Enhanced")
         self.setGeometry(50, 50, 1400, 900)
-        self.setStyleSheet("""
-            QMainWindow { background-color: #f5f6f8; }
-            QGroupBox {
-                font-weight: 600;
-                font-size: 13px;
-                border: 2px solid #e0e0e0;
-                border-radius: 8px;
-                margin-top: 14px;
-                padding: 12px 8px 8px 8px;
-                background-color: #ffffff;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 12px;
-                padding: 0 8px;
-                color: #1a73e8;
-            }
-            QPushButton {
-                padding: 10px 18px;
-                border-radius: 6px;
-                border: 2px solid #dadce0;
-                background-color: #ffffff;
-                color: #3c4043;
-                font-size: 13px;
-                font-weight: 500;
-                min-height: 20px;
-            }
-            QPushButton:hover {
-                background-color: #f1f3f4;
-                border-color: #c6c9cc;
-            }
-            QPushButton:pressed {
-                background-color: #e8eaed;
-            }
-            QPushButton:disabled {
-                background-color: #f1f3f4;
-                color: #9aa0a6;
-                border-color: #e8eaed;
-            }
-            QPushButton[class="primary"] {
-                background-color: #1a73e8;
-                color: white;
-                border: none;
-                font-weight: 600;
-            }
-            QPushButton[class="primary"]:hover {
-                background-color: #1557b0;
-            }
-            QPushButton[class="primary"]:pressed {
-                background-color: #174ea6;
-            }
-            QPushButton[class="success"] {
-                background-color: #1e8e3e;
-                color: white;
-                border: none;
-                font-weight: 600;
-            }
-            QPushButton[class="success"]:hover {
-                background-color: #137333;
-            }
-            QPushButton[class="danger"] {
-                background-color: #d93025;
-                color: white;
-                border: none;
-            }
-            QPushButton[class="danger"]:hover {
-                background-color: #b31412;
-            }
-            QLineEdit {
-                padding: 8px 10px;
-                border: 2px solid #dadce0;
-                border-radius: 6px;
-                background-color: #ffffff;
-                font-size: 13px;
-                color: #202124;
-            }
-            QLineEdit:focus {
-                border-color: #1a73e8;
-                background-color: #ffffff;
-            }
-            QComboBox {
-                padding: 8px 10px;
-                border: 2px solid #dadce0;
-                border-radius: 6px;
-                background-color: #ffffff;
-                font-size: 13px;
-                color: #202124;
-                min-height: 20px;
-            }
-            QComboBox:focus {
-                border-color: #1a73e8;
-            }
-            QComboBox::drop-down {
-                border: none;
-                width: 24px;
-            }
-            QListWidget {
-                border: 2px solid #dadce0;
-                border-radius: 6px;
-                background-color: #ffffff;
-                padding: 4px;
-            }
-            QListWidget::item {
-                padding: 8px;
-                border-radius: 4px;
-                margin: 2px 0;
-            }
-            QListWidget::item:hover {
-                background-color: #f1f3f4;
-            }
-            QListWidget::item:selected {
-                background-color: #e8f0fe;
-                color: #1a73e8;
-            }
-            QLabel {
-                color: #3c4043;
-            }
-            QScrollArea {
-                border: none;
-                background: transparent;
-            }
-        """)
+        # Apply unified dark theme
+        self.setStyleSheet(get_stylesheet())
 
         # Data state
         self.wvnFull = np.zeros([100, 1])
@@ -334,6 +227,11 @@ class P_Mean_Process_UI(QMainWindow):
         self.previous_spect = None  # For comparison
         self.previous_wvn = None
         self.wlCorr = np.ones((500, 1)) * 1.2
+
+        # File paths for independent upload
+        self.data_file = None
+        self.wlcorr_file = None
+        self.calibration_file = None
 
         self.operations = []
         self.history = []
@@ -353,6 +251,7 @@ class P_Mean_Process_UI(QMainWindow):
 
         self._build_ui()
         self._update_ui_state()
+        self._update_file_widgets_visibility()
 
     def _build_ui(self):
         central = QWidget()
@@ -383,11 +282,17 @@ class P_Mean_Process_UI(QMainWindow):
         # Parameters Group
         params_group = QGroupBox("Processing Parameters")
         params_layout = QFormLayout(params_group)
+        params_layout.setSpacing(8)
+        params_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
         self.edit_start = QLineEdit("900")
+        self.edit_start.setMinimumHeight(32)
         self.edit_stop = QLineEdit("1700")
+        self.edit_stop.setMinimumHeight(32)
         self.edit_polyorder = QLineEdit("7")
+        self.edit_polyorder.setMinimumHeight(32)
         self.edit_binwidth = QLineEdit("3.5")
+        self.edit_binwidth.setMinimumHeight(32)
 
         params_layout.addRow("Truncate Start (cm⁻¹):", self.edit_start)
         params_layout.addRow("Truncate Stop (cm⁻¹):", self.edit_stop)
@@ -399,16 +304,23 @@ class P_Mean_Process_UI(QMainWindow):
         # Denoise Group
         denoise_group = QGroupBox("Denoise Settings")
         denoise_layout = QFormLayout(denoise_group)
+        denoise_layout.setSpacing(8)
+        denoise_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
 
         self.combo_denoise = QComboBox()
         self.combo_denoise.addItems(["Savitzky-Golay", "Moving Average", "Median Filter", "None"])
         self.combo_denoise.currentTextChanged.connect(self._update_denoise_visibility)
+        self.combo_denoise.setMinimumHeight(32)
         denoise_layout.addRow("Method:", self.combo_denoise)
 
         self.edit_sgorder = QLineEdit("2")
+        self.edit_sgorder.setMinimumHeight(32)
         self.edit_sgframe = QLineEdit("7")
+        self.edit_sgframe.setMinimumHeight(32)
         self.edit_mawindow = QLineEdit("5")
+        self.edit_mawindow.setMinimumHeight(32)
         self.edit_mediank = QLineEdit("5")
+        self.edit_mediank.setMinimumHeight(32)
 
         self.lbl_sgorder = QLabel("SG Order:")
         self.lbl_sgframe = QLabel("SG Frame:")
@@ -426,44 +338,129 @@ class P_Mean_Process_UI(QMainWindow):
         # Config Group
         config_group = QGroupBox("Configuration")
         config_layout = QHBoxLayout(config_group)
+        config_layout.setSpacing(8)
         btn_save_config = QPushButton("Save Config")
         btn_save_config.clicked.connect(self.on_save_config)
+        btn_save_config.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         btn_load_config = QPushButton("Load Config")
         btn_load_config.clicked.connect(self.on_load_config)
+        btn_load_config.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         config_layout.addWidget(btn_save_config)
         config_layout.addWidget(btn_load_config)
         left_layout.addWidget(config_group)
 
+        # Input Files Group
+        files_group = QGroupBox("Input Files")
+        files_layout = QVBoxLayout(files_group)
+        files_layout.setSpacing(8)
+
+        # System info label
+        is_renishaw = self._is_renishaw_system()
+        system_text = f"System: {self.current_system}"
+        if is_renishaw:
+            system_text += " (WL Correction & Calibration not required)"
+        self.lbl_system_info = QLabel(system_text)
+        self.lbl_system_info.setWordWrap(True)
+        self.lbl_system_info.setStyleSheet(
+            f"color: {Colors.SUCCESS}; font-weight: bold; padding: 8px; "
+            f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px;"
+            if is_renishaw else
+            f"color: {Colors.PRIMARY}; font-weight: bold; padding: 8px; "
+            f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px;"
+        )
+        files_layout.addWidget(self.lbl_system_info)
+
+        # Spectrum Data file upload
+        data_layout = QHBoxLayout()
+        data_layout.setSpacing(8)
+        self.btn_select_data = QPushButton("Select Spectrum Data")
+        self.btn_select_data.clicked.connect(self.on_select_data_file)
+        self.btn_select_data.setMinimumWidth(160)
+        data_layout.addWidget(self.btn_select_data)
+        self.lbl_data_file = QLabel("Not selected")
+        self.lbl_data_file.setStyleSheet(f"color: {Colors.DANGER};")
+        self.lbl_data_file.setWordWrap(True)
+        data_layout.addWidget(self.lbl_data_file, 1)
+        files_layout.addLayout(data_layout)
+
+        # WL Correction file upload (container for visibility control)
+        self.wl_widget = QWidget()
+        wl_layout = QHBoxLayout(self.wl_widget)
+        wl_layout.setContentsMargins(0, 0, 0, 0)
+        wl_layout.setSpacing(8)
+        self.btn_select_wlcorr = QPushButton("Select WL Correction")
+        self.btn_select_wlcorr.clicked.connect(self.on_select_wlcorr_file)
+        self.btn_select_wlcorr.setMinimumWidth(160)
+        wl_layout.addWidget(self.btn_select_wlcorr)
+        self.lbl_wlcorr_file = QLabel("Not selected")
+        self.lbl_wlcorr_file.setStyleSheet(f"color: {Colors.DANGER};")
+        self.lbl_wlcorr_file.setWordWrap(True)
+        wl_layout.addWidget(self.lbl_wlcorr_file, 1)
+        files_layout.addWidget(self.wl_widget)
+
+        # Calibration file upload (container for visibility control)
+        self.cal_widget = QWidget()
+        cal_layout = QHBoxLayout(self.cal_widget)
+        cal_layout.setContentsMargins(0, 0, 0, 0)
+        cal_layout.setSpacing(8)
+        self.btn_select_cal = QPushButton("Select Calibration (.mat)")
+        self.btn_select_cal.clicked.connect(self.on_select_calibration_file)
+        self.btn_select_cal.setMinimumWidth(160)
+        cal_layout.addWidget(self.btn_select_cal)
+        self.lbl_cal_file = QLabel("Not selected")
+        self.lbl_cal_file.setStyleSheet(f"color: {Colors.DANGER};")
+        self.lbl_cal_file.setWordWrap(True)
+        cal_layout.addWidget(self.lbl_cal_file, 1)
+        files_layout.addWidget(self.cal_widget)
+
+        left_layout.addWidget(files_group)
+
         # Navigation Group
         nav_group = QGroupBox("Navigation")
         nav_layout = QVBoxLayout(nav_group)
+        nav_layout.setSpacing(8)
 
         # Load data button
-        self.btn_load = QPushButton("Load Data Files")
+        self.btn_load = QPushButton("Load && Process Data")
         self.btn_load.setProperty("class", "success")
         self.btn_load.clicked.connect(self.on_load_rdata_files)
+        self.btn_load.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         nav_layout.addWidget(self.btn_load)
 
         # Step navigation
         step_nav = QHBoxLayout()
+        step_nav.setSpacing(8)
         self.btn_previous = QPushButton("< Previous")
         self.btn_previous.clicked.connect(self.on_previous_step)
+        self.btn_previous.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_next = QPushButton("Next >")
         self.btn_next.clicked.connect(self.on_next_step)
         self.btn_next.setProperty("class", "primary")
+        self.btn_next.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         step_nav.addWidget(self.btn_previous)
         step_nav.addWidget(self.btn_next)
         nav_layout.addLayout(step_nav)
 
         # Save buttons
         save_layout = QHBoxLayout()
+        save_layout.setSpacing(8)
         self.btn_save_fig = QPushButton("Save Figure")
         self.btn_save_fig.clicked.connect(self.on_save_figure)
+        self.btn_save_fig.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.btn_save_data = QPushButton("Save Data")
         self.btn_save_data.clicked.connect(self.on_save_data)
+        self.btn_save_data.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         save_layout.addWidget(self.btn_save_fig)
         save_layout.addWidget(self.btn_save_data)
         nav_layout.addLayout(save_layout)
+
+        # Switch to Batch Process button
+        self.btn_batch = QPushButton("Switch to Batch Process")
+        self.btn_batch.setProperty("class", "info")
+        self.btn_batch.setToolTip("Open Batch Processing for multiple files")
+        self.btn_batch.clicked.connect(self.on_switch_to_batch)
+        self.btn_batch.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        nav_layout.addWidget(self.btn_batch)
 
         left_layout.addWidget(nav_group)
 
@@ -671,8 +668,13 @@ class P_Mean_Process_UI(QMainWindow):
                 self.operations.append("SubtractBaseline")
 
             elif step == "SpectralResponseCorrection":
-                self.current_spect = SpectralResponseCorrection(self.wlCorr, self.current_spect)
-                self.operations.append("SpectralResponseCorrection")
+                if self._is_renishaw_system():
+                    # Skip spectral response correction for Renishaw system
+                    self.operations.append("SpectralResponseCorrection(Skipped-Renishaw)")
+                    self.lbl_status.setText("SpectralResponseCorrection skipped for Renishaw system.")
+                else:
+                    self.current_spect = SpectralResponseCorrection(self.wlCorr, self.current_spect)
+                    self.operations.append("SpectralResponseCorrection")
 
             elif step == "CosmicRayRemoval":
                 self.current_spect = CosmicRayRemoval(self.current_spect)
@@ -800,44 +802,109 @@ class P_Mean_Process_UI(QMainWindow):
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to save: {e}")
 
-    def on_load_rdata_files(self):
-        """Load spectrum, WL correction, and calibration files."""
-        data_file, _ = QFileDialog.getOpenFileName(
+    def _is_renishaw_system(self):
+        """Check if the current system is Renishaw."""
+        return self.current_system.lower() == "renishaw"
+
+    def _update_file_widgets_visibility(self):
+        """Show/hide WL Correction and Calibration widgets based on system type."""
+        is_renishaw = self._is_renishaw_system()
+        self.wl_widget.setVisible(not is_renishaw)
+        self.cal_widget.setVisible(not is_renishaw)
+
+    def on_select_data_file(self):
+        """Select spectrum data file."""
+        file_path, _ = QFileDialog.getOpenFileName(
             self, "Select Spectrum Data",
             "", "Data Files (*.txt *.csv *.xlsx);;All Files (*)"
         )
-        if not data_file:
-            return
+        if file_path:
+            self.data_file = file_path
+            self.lbl_data_file.setText(os.path.basename(file_path))
+            self.lbl_data_file.setStyleSheet(f"color: {Colors.SUCCESS};")
+            self.lbl_status.setText(f"Data file selected: {os.path.basename(file_path)}")
 
-        wlcorr_file, _ = QFileDialog.getOpenFileName(
+    def on_select_wlcorr_file(self):
+        """Select WL Correction file."""
+        file_path, _ = QFileDialog.getOpenFileName(
             self, "Select WL Correction Data",
             "", "Data Files (*.txt *.csv *.xlsx);;All Files (*)"
         )
-        if not wlcorr_file:
-            return
+        if file_path:
+            self.wlcorr_file = file_path
+            self.lbl_wlcorr_file.setText(os.path.basename(file_path))
+            self.lbl_wlcorr_file.setStyleSheet(f"color: {Colors.SUCCESS};")
+            self.lbl_status.setText(f"WL Correction file selected: {os.path.basename(file_path)}")
 
-        wvn_file, _ = QFileDialog.getOpenFileName(
+    def on_select_calibration_file(self):
+        """Select Calibration (.mat) file."""
+        file_path, _ = QFileDialog.getOpenFileName(
             self, "Select Calibration File (.mat)",
             "", "MAT Files (*.mat);;All Files (*)"
         )
-        if not wvn_file:
+        if file_path:
+            self.calibration_file = file_path
+            self.lbl_cal_file.setText(os.path.basename(file_path))
+            self.lbl_cal_file.setStyleSheet(f"color: {Colors.SUCCESS};")
+            self.lbl_status.setText(f"Calibration file selected: {os.path.basename(file_path)}")
+
+    def on_load_rdata_files(self):
+        """Load spectrum data files using the independently selected files.
+        For Renishaw, only data file is needed.
+        For other systems, WL correction and calibration files are also required."""
+
+        is_renishaw = self._is_renishaw_system()
+
+        # Validate that required files are selected
+        if not self.data_file:
+            QMessageBox.warning(self, "Error", "Please select a spectrum data file first.")
             return
 
+        if not is_renishaw:
+            if not self.wlcorr_file:
+                QMessageBox.warning(self, "Error", "Please select a WL Correction file.")
+                return
+            if not self.calibration_file:
+                QMessageBox.warning(self, "Error", "Please select a Calibration (.mat) file.")
+                return
+
         try:
-            # Load spectrum
-            data_df = rdata.load_spectrum_data(data_file)
-            self.current_spect = data_df.flatten().astype(np.float64)
-            self.rawSpect = self.current_spect.copy()
+            if is_renishaw:
+                # Renishaw: Data file contains both wavenumber and intensity (2 columns)
+                data_df = rdata.load_spectrum_data(self.data_file)
+                data_arr = data_df if isinstance(data_df, np.ndarray) else data_df.to_numpy()
+                data_arr = np.asarray(data_arr, dtype=np.float64)
 
-            # Load WL correction
-            wl_corr = rdata.read_txt_file(wlcorr_file)
-            if wl_corr is None:
-                raise ValueError("Failed to read WL correction file")
-            self.wlCorr = wl_corr.to_numpy().astype(np.float64)
+                if data_arr.ndim == 2 and data_arr.shape[1] >= 2:
+                    # Two-column format: [wavenumber, intensity]
+                    self.wvnFull = data_arr[:, 0].flatten()
+                    self.current_spect = data_arr[:, 1].flatten()
+                else:
+                    # Single column - use index as x-axis
+                    self.current_spect = data_arr.flatten()
+                    self.wvnFull = np.arange(len(self.current_spect), dtype=np.float64)
 
-            # Load wavenumber
-            self.wvnFull = rdata.getwvnfrompath(wvn_file).flatten().astype(np.float64)
-            self.current_wvn = self.wvnFull.copy()
+                self.rawSpect = self.current_spect.copy()
+                self.current_wvn = self.wvnFull.copy()
+                # Renishaw doesn't need WL correction
+                self.wlCorr = np.ones_like(self.current_spect).reshape(-1, 1)
+
+            else:
+                # Non-Renishaw: Load three separate files
+                # Load spectrum
+                data_df = rdata.load_spectrum_data(self.data_file)
+                self.current_spect = data_df.flatten().astype(np.float64)
+                self.rawSpect = self.current_spect.copy()
+
+                # Load WL correction
+                wl_corr = rdata.read_txt_file(self.wlcorr_file)
+                if wl_corr is None:
+                    raise ValueError("Failed to read WL correction file")
+                self.wlCorr = wl_corr.to_numpy().astype(np.float64)
+
+                # Load wavenumber from calibration file
+                self.wvnFull = rdata.getwvnfrompath(self.calibration_file).flatten().astype(np.float64)
+                self.current_wvn = self.wvnFull.copy()
 
             # Reset state
             self.history = []
@@ -852,14 +919,24 @@ class P_Mean_Process_UI(QMainWindow):
             self._update_plots(show_comparison=False)
             self._update_ui_state()
 
+            system_info = " (Renishaw - no WL/Cal needed)" if is_renishaw else ""
             self.lbl_status.setText(
-                f"Loaded: {os.path.basename(data_file)} | "
+                f"Loaded: {os.path.basename(self.data_file)}{system_info} | "
                 f"Points: {len(self.current_spect)} | "
                 f"Wvn range: {self.wvnFull.min():.1f} - {self.wvnFull.max():.1f} cm⁻¹"
             )
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load files: {e}")
+
+    def on_switch_to_batch(self):
+        """Open Batch Processing window."""
+        # Use lazy import to avoid circular import issues
+        from UI_utils.UI_P_Mean_Batch_Process import BatchPMeanUI
+
+        self.batch_window = BatchPMeanUI()
+        self.batch_window.show()
+        self.lbl_status.setText("Batch Processing window opened.")
 
 
 if __name__ == "__main__":

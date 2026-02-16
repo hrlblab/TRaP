@@ -27,95 +27,70 @@ from PyQt5.QtWidgets import (
     QCheckBox, QGroupBox, QGridLayout, QGraphicsOpacityEffect
 )
 
+from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
+
 
 def apply_modern_style(app):
-    """Apply a global dark modern stylesheet."""
-    app.setStyleSheet("""
-        QWidget {
-            font-family: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
-            color: #EAEAEA;
-            background: #121212;
-        }
-        QLabel#Title { font-size: 28px; font-weight: 600; }
-        QLabel#StepTitle { font-size: 20px; font-weight: 500; color: #4C8BF5; }
-        QLabel#Subtitle { color: #8B8B8B; font-size: 13px; }
-        QLabel#Description { color: #AAAAAA; font-size: 12px; line-height: 1.4; }
-
-        QPushButton {
-            border: none;
-            padding: 10px 14px;
-            border-radius: 10px;
-            background: #1F1F1F;
-            font-size: 13px;
-        }
-        QPushButton:hover { background: #2A2A2A; }
-        QPushButton:pressed { background: #343434; }
-        QPushButton:disabled { background: #1A1A1A; color: #555555; }
-
-        QPushButton[cta="true"] {
-            background: #4C8BF5;
-            color: white;
+    """Apply unified premium dark theme stylesheet."""
+    # Use the unified theme with wizard-specific additions
+    base_style = get_stylesheet()
+    wizard_additions = f"""
+        /* Wizard-specific styles */
+        QLabel#Title {{
+            font-size: {Fonts.SIZE_XXXL}px;
+            font-weight: 700;
+            color: {Colors.TEXT_PRIMARY};
+        }}
+        QLabel#StepTitle {{
+            font-size: {Fonts.SIZE_XL}px;
             font-weight: 600;
-            font-size: 14px;
-            padding: 12px 20px;
-        }
-        QPushButton[cta="true"]:hover { background: #5B97F7; }
-        QPushButton[cta="true"]:pressed { background: #3B78E5; }
-        QPushButton[cta="true"]:disabled { background: #2A4A7A; color: #888888; }
+            color: {Colors.PRIMARY};
+        }}
+        QLabel#Subtitle {{
+            color: {Colors.TEXT_SECONDARY};
+            font-size: {Fonts.SIZE_BASE}px;
+        }}
+        QLabel#Description {{
+            color: {Colors.TEXT_SECONDARY};
+            font-size: {Fonts.SIZE_SM}px;
+            line-height: 1.5;
+        }}
 
-        QPushButton.step {
+        QPushButton.step {{
             text-align: left;
-            padding: 12px 14px;
-            border-radius: 8px;
+            padding: 14px 18px;
+            border-radius: 10px;
             background: transparent;
-        }
-        QPushButton.step:hover { background: rgba(255,255,255,0.06); }
-        QPushButton.step[active="true"] {
-            background: rgba(76,139,245,0.18);
-            color: #BFD6FF;
+            font-size: {Fonts.SIZE_BASE}px;
+        }}
+        QPushButton.step:hover {{
+            background: {Colors.BG_HOVER};
+        }}
+        QPushButton.step[active="true"] {{
+            background: {Colors.PRIMARY_MUTED};
+            color: {Colors.PRIMARY_HOVER};
             font-weight: 600;
-        }
-        QPushButton.step[completed="true"] {
-            color: #28a745;
-        }
+        }}
+        QPushButton.step[completed="true"] {{
+            color: {Colors.SUCCESS};
+        }}
+        QPushButton.step[skipped="true"] {{
+            color: {Colors.TEXT_TERTIARY};
+            background: {Colors.BG_TERTIARY};
+            opacity: 0.5;
+        }}
 
-        QFrame#card { background: #171717; border-radius: 14px; }
-        QFrame#statusCard { background: #1A1A1A; border-radius: 8px; padding: 8px; }
-        QScrollArea { background: transparent; border: none; }
-
-        QCheckBox {
-            spacing: 8px;
-            font-size: 13px;
-        }
-        QCheckBox::indicator {
-            width: 18px;
-            height: 18px;
-            border-radius: 4px;
-            border: 2px solid #555;
-            background: #1F1F1F;
-        }
-        QCheckBox::indicator:checked {
-            background: #4C8BF5;
-            border-color: #4C8BF5;
-        }
-        QCheckBox::indicator:hover {
-            border-color: #777;
-        }
-
-        QGroupBox {
-            font-weight: 500;
-            border: 1px solid #333;
-            border-radius: 8px;
-            margin-top: 12px;
-            padding-top: 8px;
-        }
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 12px;
-            padding: 0 6px;
-            color: #AAAAAA;
-        }
-    """)
+        QFrame#card {{
+            background: {Colors.BG_SECONDARY};
+            border-radius: 16px;
+        }}
+        QFrame#statusCard {{
+            background: {Colors.BG_TERTIARY};
+            border-radius: 10px;
+            padding: 10px;
+        }}
+    """
+    app.setStyleSheet(base_style + wizard_additions)
 
 
 class ModernCard(QFrame):
@@ -144,31 +119,56 @@ class ModernShell(QWidget):
 
     def _build_ui(self):
         root = QHBoxLayout(self)
-        root.setContentsMargins(16, 16, 16, 16)
-        root.setSpacing(16)
+        root.setContentsMargins(12, 12, 12, 12)
+        root.setSpacing(12)
 
-        # Left navigation rail
-        left = QVBoxLayout()
-        left.setSpacing(10)
+        # Left navigation rail - wrapped in scroll area for small windows
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setMinimumWidth(180)
+        left_scroll.setMaximumWidth(260)
+        left_scroll.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        left_scroll.setStyleSheet("""
+            QScrollArea { background: transparent; border: none; }
+            QScrollBar:vertical {
+                background: transparent;
+                width: 6px;
+                border-radius: 3px;
+            }
+            QScrollBar::handle:vertical {
+                background: #444;
+                border-radius: 3px;
+                min-height: 20px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+        """)
+
+        left_widget = QWidget()
+        left = QVBoxLayout(left_widget)
+        left.setContentsMargins(4, 4, 4, 4)
+        left.setSpacing(8)
 
         # Logo
         logo = QLabel()
         pix = QPixmap('vanderbilt_biophotonics_center_logo.jpg')
         if not pix.isNull():
-            logo.setPixmap(pix.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            logo.setPixmap(pix.scaled(56, 56, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         left.addWidget(logo)
 
         # Title
         title = QLabel("Raman Processing")
         title.setObjectName("Title")
+        title.setWordWrap(True)
         left.addWidget(title)
 
         # Subtitle
         subtitle = QLabel("Step-by-step workflow")
         subtitle.setObjectName("Subtitle")
         left.addWidget(subtitle)
-        left.addSpacing(12)
+        left.addSpacing(8)
 
         # Step buttons
         for i, t in enumerate(self.step_titles):
@@ -177,7 +177,7 @@ class ModernShell(QWidget):
             b.setProperty("class", "step")
             b.setProperty("active", False)
             b.setProperty("completed", False)
-            b.setMinimumHeight(40)
+            b.setMinimumHeight(36)
             b.setObjectName("stepBtn")
             b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
             b.clicked.connect(lambda _, idx=i: self._on_nav_clicked(idx))
@@ -185,12 +185,13 @@ class ModernShell(QWidget):
             left.addWidget(b)
 
         left.addStretch(1)
+        left_scroll.setWidget(left_widget)
 
         # Right content card
         right_card = ModernCard()
         right_layout = QVBoxLayout(right_card)
-        right_layout.setContentsMargins(18, 18, 18, 18)
-        right_layout.setSpacing(12)
+        right_layout.setContentsMargins(14, 14, 14, 14)
+        right_layout.setSpacing(10)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -198,7 +199,7 @@ class ModernShell(QWidget):
         scroll.setWidget(self.content_widget)
         right_layout.addWidget(scroll)
 
-        root.addLayout(left, 1)
+        root.addWidget(left_scroll, 1)
         root.addWidget(right_card, 3)
 
     def _on_nav_clicked(self, idx: int):
@@ -217,6 +218,15 @@ class ModernShell(QWidget):
         if 0 <= idx < len(self.step_buttons):
             b = self.step_buttons[idx]
             b.setProperty("completed", completed)
+            b.style().unpolish(b)
+            b.style().polish(b)
+
+    def set_step_skipped(self, idx: int, skipped: bool = True):
+        """Mark a step as skipped (dimmed) in navigation rail."""
+        if 0 <= idx < len(self.step_buttons):
+            b = self.step_buttons[idx]
+            b.setProperty("skipped", skipped)
+            b.setEnabled(not skipped)
             b.style().unpolish(b)
             b.style().polish(b)
 
@@ -266,7 +276,11 @@ class AnimationManager:
         anim.setEasingCurve(QEasingCurve.OutQuad)
 
         AnimationManager._active_animations.append(anim)
-        anim.finished.connect(lambda: AnimationManager._cleanup(anim))
+        # Clean up effect after animation to prevent click offset issues
+        def on_finished():
+            AnimationManager._cleanup(anim)
+            widget.setGraphicsEffect(None)
+        anim.finished.connect(on_finished)
         anim.start()
         return anim
 
@@ -285,7 +299,11 @@ class AnimationManager:
         anim.setEasingCurve(QEasingCurve.InQuad)
 
         AnimationManager._active_animations.append(anim)
-        anim.finished.connect(lambda: AnimationManager._cleanup(anim))
+        # Clean up effect after animation to prevent click offset issues
+        def on_finished():
+            AnimationManager._cleanup(anim)
+            widget.setGraphicsEffect(None)
+        anim.finished.connect(on_finished)
         anim.start()
         return anim
 
@@ -358,7 +376,11 @@ class AnimationManager:
         group.addAnimation(fade)
 
         AnimationManager._active_animations.append(group)
-        group.finished.connect(lambda: AnimationManager._cleanup(group))
+        # Clean up effect after animation to prevent click offset issues
+        def on_finished():
+            AnimationManager._cleanup(group)
+            widget.setGraphicsEffect(None)
+        group.finished.connect(on_finished)
         group.start()
         return group
 
@@ -431,13 +453,14 @@ class SystemSelectWizard(QWidget):
     def __init__(self, shell_bridge=None):
         super().__init__()
         self.setWindowTitle("Raman Process Wizard v2")
-        self.setMinimumSize(720, 520)
+        self.setMinimumSize(480, 400)
 
         # State
         self.step = 0
         self.opened_windows = []
         self.config = ConfigManager()
         self._shell_sync = shell_bridge
+        self._shell = None  # Reference to ModernShell for step skipping
 
         # Step completion tracking
         self.step_completed = [False] * len(self.STEPS)
@@ -653,11 +676,17 @@ class SystemSelectWizard(QWidget):
         """Handle calibration checkbox toggle."""
         self.has_calibration_file = self.chk_has_cal.isChecked()
         self._update_status()
+        # Update shell step appearance
+        if self._shell is not None:
+            self._shell.set_step_skipped(1, self.has_calibration_file)
 
     def _on_toggle_response(self, state):
         """Handle response correction checkbox toggle."""
         self.has_response_correction = self.chk_has_resp.isChecked()
         self._update_status()
+        # Update shell step appearance
+        if self._shell is not None:
+            self._shell.set_step_skipped(2, self.has_response_correction)
 
     def _go_to_step_0(self):
         """Navigate back to step 0."""
@@ -838,5 +867,6 @@ if __name__ == "__main__":
 
     # Sync shell with wizard
     wizard._shell_sync = shell.set_active_step
+    wizard._shell = shell  # For step skipping functionality
 
     sys.exit(app.exec_())

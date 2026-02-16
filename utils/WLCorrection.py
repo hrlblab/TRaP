@@ -114,7 +114,11 @@ def wl_correction_from_true_and_measured(
     cal_wvn = np.asarray(cal_wvn, dtype=float).flatten()
 
     # Smooth user-measured White Light Spectrum
-    SWL = utils.savgol.savgol_filter(wl_measured, smooth_window, smooth_order, 0)
+    # savgol_filter expects (m, n) format where m=signals, n=length
+    # Reshape to row vector (1, n), then flatten result
+    wl_row = wl_measured.reshape(1, -1)
+    SWL, _ = utils.savgol.savgol_filter(wl_row, smooth_window, smooth_order, 0)
+    SWL = SWL.flatten()
 
     # Convert wavenumber (cm^-1) -> wavelength
     Cal_wvlength = 10e-7 / cal_wvn
@@ -190,5 +194,8 @@ def nist_correction_from_srm(
     SRM_correction = NTSRM / np.where(NSRM == 0, 1.0, NSRM)
 
     # Final smoothing
-    SRM_correction = utils.savgol.savgol_filter(SRM_correction, smooth_window, smooth_order, 0)
+    # savgol_filter expects (m, n) format where m=signals, n=length
+    srm_row = SRM_correction.reshape(1, -1)
+    SRM_correction, _ = utils.savgol.savgol_filter(srm_row, smooth_window, smooth_order, 0)
+    SRM_correction = SRM_correction.flatten()
     return SRM_correction.reshape(-1, 1)

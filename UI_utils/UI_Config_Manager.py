@@ -2,8 +2,11 @@ import json
 import os
 
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QLineEdit, \
-    QVBoxLayout, QFileDialog, QMessageBox, QComboBox
+    QVBoxLayout, QFileDialog, QMessageBox, QComboBox, QGroupBox, QFormLayout
 from PyQt5.QtCore import pyqtSignal
+from PyQt5.QtGui import QFont
+
+from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
 
 class ConfigManager:
     _instance = None
@@ -79,9 +82,20 @@ class ConfigManagerUI(QWidget):
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle("Configuration")
-        self.setGeometry(400, 200, 300, 520)
+        self.setWindowTitle("System Configuration")
+        self.setGeometry(400, 200, 400, 600)
+        # Apply unified dark theme
+        self.setStyleSheet(get_stylesheet())
+
         self.layout = QVBoxLayout()
+        self.layout.setSpacing(12)
+        self.layout.setContentsMargins(20, 20, 20, 20)
+
+        # Title
+        title = QLabel("System Configuration")
+        title.setFont(QFont("Segoe UI", Fonts.SIZE_XL, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; padding: 10px 0;")
+        self.layout.addWidget(title)
 
         # System
         system_label = QLabel("System", self)
@@ -146,15 +160,20 @@ class ConfigManagerUI(QWidget):
         wl_combo.currentIndexChanged.connect(self.update_detector_options)
         self.update_wavelength_options()
 
-        # Save / Load
-        btn_save = QPushButton("Save", self)
+        # Save / Load buttons
+        self.layout.addSpacing(20)
+
+        btn_save = QPushButton("Save Configuration", self)
+        btn_save.setProperty("class", "success")
         btn_save.clicked.connect(self.save_config)
         self.layout.addWidget(btn_save)
 
-        btn_load = QPushButton("Load", self)
+        btn_load = QPushButton("Load Configuration", self)
+        btn_load.setProperty("class", "secondary")
         btn_load.clicked.connect(self.load_config_with_dialog)
         self.layout.addWidget(btn_load)
 
+        self.layout.addStretch()
         self.setLayout(self.layout)
 
     def update_wavelength_options(self):
