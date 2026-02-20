@@ -223,8 +223,10 @@ class ConfigManagerUI(QDialog):
         self.labels = {}
 
         self.setWindowTitle("Configuration Manager")
-        self.setMinimumSize(800, 600)
-        self.resize(950, 680)
+        self.setMinimumSize(550, 400)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(950, int(screen.width() * 0.9)), min(680, int(screen.height() * 0.9)))
+        self.move(screen.center() - self.rect().center())
 
         self._apply_style()
         self._build_ui()

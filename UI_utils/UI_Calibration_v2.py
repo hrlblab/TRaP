@@ -417,7 +417,9 @@ class CalibrationUI(QDialog):
             Qt.WindowCloseButtonHint
         )
         self.setMinimumSize(600, 450)
-        self.resize(1200, 800)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1200, int(screen.width() * 0.9)), min(800, int(screen.height() * 0.9)))
+        self.move(screen.center() - self.rect().center())
         # Apply unified dark theme
         self.setStyleSheet(get_stylesheet())
 
@@ -449,9 +451,15 @@ class CalibrationUI(QDialog):
 
         # Main content splitter
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
 
-        # Left panel - controls
-        left_panel = QFrame()
+        # Left panel - controls (scrollable)
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setMinimumWidth(250)
+        left_scroll.setFrameShape(QFrame.NoFrame)
+        left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(5, 5, 5, 5)
 
@@ -629,9 +637,12 @@ class CalibrationUI(QDialog):
         right_layout.addWidget(self.canvas)
 
         # Add panels to splitter
-        splitter.addWidget(left_panel)
+        left_scroll.setWidget(left_panel)
+        splitter.addWidget(left_scroll)
         splitter.addWidget(right_panel)
-        splitter.setSizes([400, 700])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([350, 700])
 
         main_layout.addWidget(splitter)
 

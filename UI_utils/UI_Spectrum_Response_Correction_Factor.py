@@ -40,7 +40,9 @@ class SpectrumCorrectionProcessUI(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Spectrum Correction Process")
-        self.setFixedSize(720, 520)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(720, int(screen.width() * 0.9)), min(520, int(screen.height() * 0.9)))
+        self.move(screen.center() - self.rect().center())
 
         # Data and state
         self.result = None

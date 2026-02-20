@@ -2,7 +2,8 @@ import json
 import os
 
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QLineEdit, \
-    QVBoxLayout, QFileDialog, QMessageBox, QComboBox, QGroupBox, QFormLayout
+    QVBoxLayout, QFileDialog, QMessageBox, QComboBox, QGroupBox, QFormLayout, \
+    QScrollArea, QFrame
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QFont
 
@@ -83,11 +84,22 @@ class ConfigManagerUI(QWidget):
 
     def initUI(self):
         self.setWindowTitle("System Configuration")
-        self.setGeometry(400, 200, 400, 600)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(400, int(screen.width() * 0.9)), min(600, int(screen.height() * 0.9)))
+        self.move(screen.center() - self.rect().center())
         # Apply unified dark theme
         self.setStyleSheet(get_stylesheet())
 
-        self.layout = QVBoxLayout()
+        # Wrap everything in a scroll area
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll_content = QWidget()
+        outer_layout.addWidget(scroll)
+
+        self.layout = QVBoxLayout(scroll_content)
         self.layout.setSpacing(12)
         self.layout.setContentsMargins(20, 20, 20, 20)
 
@@ -174,7 +186,7 @@ class ConfigManagerUI(QWidget):
         self.layout.addWidget(btn_load)
 
         self.layout.addStretch()
-        self.setLayout(self.layout)
+        scroll.setWidget(scroll_content)
 
     def update_wavelength_options(self):
         system = self.inputs["System"].currentText()

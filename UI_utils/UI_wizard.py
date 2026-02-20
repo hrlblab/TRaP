@@ -1,7 +1,7 @@
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (
-    QWidget, QLabel, QPushButton, QVBoxLayout, QMessageBox
+    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QMessageBox
 )
 from UI_utils.UI_Config_Manager import ConfigManagerUI, ConfigManager
 from UI_utils.UI_Spectrum_Response_Correction_Factor import SpectrumCorrectionProcessUI
@@ -14,7 +14,9 @@ class SystemSelectWizard(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Raman Process Wizard")
-        self.setGeometry(300, 200, 400, 380)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(400, int(screen.width() * 0.9)), min(500, int(screen.height() * 0.9)))
+        self.move(screen.center() - self.rect().center())
 
         # Workflow step labels
         self.steps = [

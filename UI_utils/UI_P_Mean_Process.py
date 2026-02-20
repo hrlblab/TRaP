@@ -215,7 +215,9 @@ class P_Mean_Process_UI(QMainWindow):
         self.current_system = config_manager.params.get("System", "")
 
         self.setWindowTitle("Spectrum Data Process - Enhanced")
-        self.setGeometry(50, 50, 1400, 900)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1400, int(screen.width() * 0.9)), min(900, int(screen.height() * 0.9)))
+        self.move(screen.center() - self.rect().center())
         # Apply unified dark theme
         self.setStyleSheet(get_stylesheet())
 
@@ -257,11 +259,20 @@ class P_Mean_Process_UI(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
-        main_layout.setSpacing(10)
+        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Left panel - Controls
+        # Use QSplitter so user can drag to resize panels
+        splitter = QSplitter(Qt.Horizontal)
+        splitter.setChildrenCollapsible(False)
+
+        # Left panel - Controls (scrollable)
+        left_scroll = QScrollArea()
+        left_scroll.setWidgetResizable(True)
+        left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        left_scroll.setMinimumWidth(250)
+        left_scroll.setFrameShape(QFrame.NoFrame)
         left_panel = QWidget()
-        left_panel.setFixedWidth(380)
         left_layout = QVBoxLayout(left_panel)
         left_layout.setSpacing(10)
 
@@ -489,9 +500,14 @@ class P_Mean_Process_UI(QMainWindow):
         self.lbl_status.setStyleSheet("padding: 5px; background-color: #e9ecef; border-radius: 3px;")
         right_layout.addWidget(self.lbl_status)
 
-        # Add to main layout
-        main_layout.addWidget(left_panel)
-        main_layout.addWidget(right_panel, 1)
+        # Add to splitter
+        left_scroll.setWidget(left_panel)
+        splitter.addWidget(left_scroll)
+        splitter.addWidget(right_panel)
+        splitter.setStretchFactor(0, 0)  # Left panel: don't stretch
+        splitter.setStretchFactor(1, 1)  # Right panel: stretch
+        splitter.setSizes([360, 640])
+        main_layout.addWidget(splitter)
 
     def _update_denoise_visibility(self):
         """Show/hide denoise parameters based on method."""

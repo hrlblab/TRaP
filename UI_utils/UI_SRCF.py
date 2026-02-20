@@ -59,7 +59,9 @@ class SRCF_UI(QDialog):
             Qt.WindowCloseButtonHint
         )
         self.setMinimumSize(600, 450)
-        self.resize(1100, 750)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(1100, int(screen.width() * 0.9)), min(750, int(screen.height() * 0.9)))
+        self.move(screen.center() - self.rect().center())
         # Apply unified dark theme
         self.setStyleSheet(get_stylesheet())
 
@@ -119,7 +121,7 @@ class SRCF_UI(QDialog):
         left_scroll.setWidgetResizable(True)
         left_scroll.setFrameShape(QFrame.NoFrame)
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        left_scroll.setMinimumWidth(280)
+        left_scroll.setMinimumWidth(250)
         left_scroll.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         left_scroll.setStyleSheet("""
             QScrollArea { background: transparent; border: none; }
@@ -363,7 +365,7 @@ class SRCF_UI(QDialog):
 
         # ============ Right Panel - Charts ============
         right_widget = QWidget()
-        right_widget.setMinimumWidth(300)
+        right_widget.setMinimumWidth(250)
         right_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(5, 5, 5, 5)

@@ -79,7 +79,9 @@ class WaveformSelectionUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Spectral Calibration Workflow")
-        self.setGeometry(100, 100, 900, 700)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(900, int(screen.width() * 0.9)), min(700, int(screen.height() * 0.9)))
+        self.move(screen.center() - self.rect().center())
 
         self.step = 1
         self.lambda_known = False

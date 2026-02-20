@@ -19,7 +19,9 @@ class MainWindow(QWidget):
 
     def initMainUI(self):
         self.setWindowTitle("RAMAN Process")
-        self.setGeometry(300, 200, 400, 300)
+        screen = QApplication.primaryScreen().availableGeometry()
+        self.resize(min(400, int(screen.width() * 0.9)), min(300, int(screen.height() * 0.9)))
+        self.move(screen.center() - self.rect().center())
 
         self.layout = QVBoxLayout()
 

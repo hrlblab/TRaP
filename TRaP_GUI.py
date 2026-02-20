@@ -57,7 +57,9 @@ def main():
     wizard._shell = shell  # For step skipping functionality
 
     shell.setWindowTitle("TRaP - Raman Processing Application")
-    shell.resize(1024, 680)
+    screen = app.primaryScreen().availableGeometry()
+    shell.resize(min(1024, int(screen.width() * 0.9)), min(680, int(screen.height() * 0.9)))
+    shell.move(screen.center() - shell.rect().center())
     shell.show()
 
     # Execute application loop

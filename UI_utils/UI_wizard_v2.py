@@ -862,7 +862,9 @@ if __name__ == "__main__":
         wizard.request_step_from_shell
     )
     shell.setWindowTitle("TRaP - Raman Processing Application")
-    shell.resize(1000, 650)
+    screen = app.primaryScreen().availableGeometry()
+    shell.resize(min(1000, int(screen.width() * 0.9)), min(650, int(screen.height() * 0.9)))
+    shell.move(screen.center() - shell.rect().center())
     shell.show()
 
     # Sync shell with wizard
