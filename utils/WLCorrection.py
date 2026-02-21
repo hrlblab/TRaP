@@ -40,6 +40,86 @@ light_curve_coeff = []
 #     return SRM_correction
 #
 
+def _read_text_robust(fp: str) -> np.ndarray:
+    """
+    Robustly read a numeric text file (txt/csv).
+
+    Handles:
+      - Header rows (non-numeric first lines are skipped)
+      - European decimal format: "1,1214" means 1.1214
+      - Tab / space / comma delimiters
+    """
+    with open(fp, 'r', encoding='utf-8') as f:
+        raw_lines = f.readlines()
+
+    # Strip empty / whitespace-only lines
+    lines = [l.strip() for l in raw_lines if l.strip()]
+    if not lines:
+        raise ValueError(f"File is empty: {fp}")
+
+    # Skip header lines (lines where first token is not numeric)
+    data_start = 0
+    for i, line in enumerate(lines):
+        token = line.split(',')[0].split('\t')[0].split()[0]
+        try:
+            float(token)
+            data_start = i
+            break
+        except ValueError:
+            continue
+    else:
+        raise ValueError(f"No numeric data found in: {fp}")
+
+    data_lines = lines[data_start:]
+
+    # Detect if file uses European decimal (comma as decimal separator).
+    # Heuristic: if a data line has exactly one comma AND no tab/semicolon,
+    # and both sides of the comma are digits, treat comma as decimal point.
+    sample = data_lines[0]
+    use_european = False
+    if '\t' not in sample and ';' not in sample:
+        parts = sample.split(',')
+        if len(parts) == 2:
+            # Could be "1,1214" (european) or "1.0,2.0" (two-column csv)
+            left, right = parts[0].strip(), parts[1].strip()
+            # If left part has a dot, it's regular CSV like "1.0,2.0"
+            if '.' not in left and '.' not in right:
+                try:
+                    float(left)
+                    float(right)
+                    # Both parseable as int-like → likely European decimal
+                    use_european = True
+                except ValueError:
+                    pass
+
+    if use_european:
+        # Replace comma with dot for decimal
+        converted = '\n'.join(l.replace(',', '.') for l in data_lines)
+        from io import StringIO
+        arr = np.loadtxt(StringIO(converted))
+    else:
+        # Detect delimiter from first data line
+        if '\t' in sample:
+            delimiter = '\t'
+        elif ';' in sample:
+            # Semicolon-delimited (common in European CSV with comma decimal)
+            # Also replace comma→dot in values
+            converted = '\n'.join(l.replace(',', '.') for l in data_lines)
+            from io import StringIO
+            arr = np.loadtxt(StringIO(converted), delimiter=';')
+            return arr
+        elif ',' in sample:
+            delimiter = ','
+        else:
+            delimiter = None  # whitespace
+
+        from io import StringIO
+        text = '\n'.join(data_lines)
+        arr = np.loadtxt(StringIO(text), delimiter=delimiter)
+
+    return arr
+
+
 def read_vector_file(fp: str) -> np.ndarray:
     """
     Read a single-column vector (txt/csv/xlsx).
@@ -49,7 +129,7 @@ def read_vector_file(fp: str) -> np.ndarray:
     """
     ext = os.path.splitext(fp)[1].lower()
     if ext in [".txt", ".csv"]:
-        arr = np.loadtxt(fp, delimiter=None)
+        arr = _read_text_robust(fp)
     elif ext in [".xlsx", ".xls"]:
         df = pd.read_excel(fp, header=None)
         arr = df.values.squeeze()
@@ -62,7 +142,7 @@ def read_2col_file(fp: str) -> np.ndarray:
     """Read a 2-column table (wavelength, intensity). Returns float array (N, 2)."""
     ext = os.path.splitext(fp)[1].lower()
     if ext in [".txt", ".csv"]:
-        arr = np.loadtxt(fp, delimiter=None)
+        arr = _read_text_robust(fp)
     elif ext in [".xlsx", ".xls"]:
         df = pd.read_excel(fp, header=None)
         arr = df.values
@@ -78,7 +158,7 @@ def read_coeffs_file(fp: str) -> np.ndarray:
     """Read polynomial coefficients (one per line or single row). Returns float array (N,)."""
     ext = os.path.splitext(fp)[1].lower()
     if ext in [".txt", ".csv"]:
-        arr = np.loadtxt(fp, delimiter=None)
+        arr = _read_text_robust(fp)
     elif ext in [".xlsx", ".xls"]:
         df = pd.read_excel(fp, header=None)
         arr = df.values.squeeze()

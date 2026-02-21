@@ -59,6 +59,19 @@ def build_with_pyinstaller():
         "--hidden-import", "PyQt5.QtCore",
         "--hidden-import", "PyQt5.QtGui",
         "--hidden-import", "PyQt5.QtWidgets",
+        "--hidden-import", "openpyxl",
+        "--hidden-import", "openpyxl.cell",
+        "--hidden-import", "openpyxl.cell._writer",
+        "--hidden-import", "scipy.io",
+        "--hidden-import", "scipy.io.matlab",
+        "--hidden-import", "scipy.sparse",
+        "--hidden-import", "scipy.linalg",
+        "--hidden-import", "scipy.signal",
+        "--hidden-import", "scipy.special",
+        "--hidden-import", "scipy.optimize",
+        "--hidden-import", "numpy.polynomial",
+        "--hidden-import", "numpy.polynomial.polynomial",
+        "--hidden-import", "matplotlib.backends.backend_qt5agg",
         # Collect all submodules
         "--collect-submodules", "UI_utils",
         "--collect-submodules", "utils",
@@ -66,6 +79,8 @@ def build_with_pyinstaller():
         "--exclude-module", "tkinter",
         "--exclude-module", "matplotlib.tests",
         "--exclude-module", "numpy.tests",
+        "--exclude-module", "PySide6",
+        "--exclude-module", "PySide2",
         # Main script
         "TRaP_GUI.py"
     ]

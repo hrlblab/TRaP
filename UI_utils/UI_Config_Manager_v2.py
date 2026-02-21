@@ -602,13 +602,36 @@ class ConfigManagerUI(QDialog):
         return panel
 
     def _populate_recent_list(self):
-        """Populate the recent configurations list."""
+        """Populate the recent configurations list.
+
+        Reads the actual Name from each JSON file to ensure names
+        are always up-to-date, even if the file was edited externally.
+        """
         self.recent_list.clear()
         for config in self.config.recent_configs:
-            item = QListWidgetItem(config.get("name", "Unnamed"))
-            item.setToolTip(config.get("path", ""))
-            item.setData(Qt.UserRole, config.get("path"))
+            path = config.get("path", "")
+            display_name = config.get("name", "Unnamed")
+
+            # Read actual Name from the file to stay in sync
+            if path and os.path.exists(path):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        file_data = json.load(f)
+                    actual_name = file_data.get("Name", "").strip()
+                    if actual_name:
+                        display_name = actual_name
+                        # Update cached name so it persists
+                        config["name"] = actual_name
+                except Exception:
+                    pass
+
+            item = QListWidgetItem(f"{display_name}  ({os.path.basename(path)})")
+            item.setToolTip(path)
+            item.setData(Qt.UserRole, path)
             self.recent_list.addItem(item)
+
+        # Persist updated names
+        self.config._save_recent_list()
 
     def _load_params_to_ui(self):
         """Load current config params to UI widgets."""
@@ -732,6 +755,7 @@ class ConfigManagerUI(QDialog):
         if path and os.path.exists(path):
             if self.config.load_config(path):
                 self._load_params_to_ui()
+                self._populate_recent_list()
                 QMessageBox.information(self, "Loaded", f"Configuration loaded:\n{os.path.basename(path)}")
 
     def _load_selected_recent(self):
@@ -769,6 +793,7 @@ class ConfigManagerUI(QDialog):
             return
         if self.config.save_as_default():
             self._update_status()
+            self._populate_recent_list()
             QMessageBox.information(self, "Saved", "Configuration saved as default.\nThis will be loaded automatically on startup.")
         else:
             QMessageBox.critical(self, "Error", "Failed to save default configuration.")
@@ -808,6 +833,7 @@ class ConfigManagerUI(QDialog):
             success = self.config.save_as_default()
 
         if success:
+            self._populate_recent_list()
             self.config_updated.emit()
             self.accept()
         else:

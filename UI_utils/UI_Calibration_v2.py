@@ -36,7 +36,7 @@ from PyQt5.QtWidgets import (
     QSplitter, QFrame, QScrollArea, QCheckBox, QLineEdit, QSpinBox,
     QDoubleSpinBox, QTabWidget, QStatusBar, QSizePolicy, QStackedWidget
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QSize
 from PyQt5.QtGui import QFont
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -95,6 +95,8 @@ class SpectrumCanvas(FigureCanvas):
         self.ax = self.fig.add_subplot(111)
         super().__init__(self.fig)
         self.setParent(parent)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumSize(200, 150)
 
         self.spectrum = None
         self.normalized_spectrum = None
@@ -113,14 +115,43 @@ class SpectrumCanvas(FigureCanvas):
         self.mpl_connect('axes_leave_event', self._on_mouse_leave)
 
         self._style_axis()
+        self.fig.tight_layout(pad=2.0)
+        self.draw()
+
+    def sizeHint(self):
+        return QSize(400, 300)
+
+    def minimumSizeHint(self):
+        return QSize(200, 150)
+
+    def _font_sizes(self):
+        w = self.width()
+        title = max(9, min(16, int(w / 40)))
+        label = max(8, min(13, int(w / 50)))
+        tick = max(7, min(12, int(w / 55)))
+        legend = max(7, min(11, int(w / 55)))
+        return title, label, tick, legend
 
     def _style_axis(self):
         """Apply dark theme styling to axis."""
+        _, _, fs_tick, _ = self._font_sizes()
         self.ax.set_facecolor(Colors.BG_TERTIARY)
         self.ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-        self.ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
+        self.ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
         for spine in self.ax.spines.values():
             spine.set_color(Colors.BORDER)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        fs_title, fs_label, fs_tick, _ = self._font_sizes()
+        self.ax.title.set_fontsize(fs_title)
+        self.ax.xaxis.label.set_fontsize(fs_label)
+        self.ax.yaxis.label.set_fontsize(fs_label)
+        self.ax.tick_params(labelsize=fs_tick)
+        if self.coord_text is not None:
+            self.coord_text.set_fontsize(max(8, fs_label))
+        self.fig.tight_layout(pad=2.0)
+        self.draw_idle()
 
     def _init_crosshair(self):
         """Initialize crosshair lines after spectrum is loaded."""
@@ -137,9 +168,10 @@ class SpectrumCanvas(FigureCanvas):
         self.crosshair_h = self.ax.axhline(y=0, color=Colors.WARNING, linewidth=1, linestyle='--', alpha=0.8, visible=False)
 
         # Coordinate text box
+        _, fs_label, _, _ = self._font_sizes()
         self.coord_text = self.ax.text(
             0.02, 0.98, '', transform=self.ax.transAxes,
-            fontsize=12, verticalalignment='top',
+            fontsize=max(8, fs_label), verticalalignment='top',
             fontfamily='monospace',
             color=Colors.TEXT_PRIMARY,
             bbox=dict(boxstyle='round,pad=0.5', facecolor=Colors.BG_DARK, edgecolor=Colors.PRIMARY, alpha=0.9)
@@ -156,12 +188,13 @@ class SpectrumCanvas(FigureCanvas):
         else:
             self.normalized_spectrum = self.spectrum.copy()
 
+        fs_title, fs_label, _, _ = self._font_sizes()
         self.ax.clear()
         self._style_axis()
         self.ax.plot(self.normalized_spectrum, color=Colors.PRIMARY, linewidth=1.0)
-        self.ax.set_title(title, fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax.set_xlabel("Pixel", fontsize=12, color=Colors.TEXT_SECONDARY)
-        self.ax.set_ylabel("Normalized Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
+        self.ax.set_title(title, fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax.set_xlabel("Pixel", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+        self.ax.set_ylabel("Normalized Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
 
         # Initialize crosshair
         self._init_crosshair()
@@ -267,13 +300,14 @@ class SpectrumCanvas(FigureCanvas):
 
         # Mark on plot with prominent style
         self.ax.plot(peak_x, peak_y_norm, 'o', color=Colors.DANGER, markersize=10, markeredgecolor='white', markeredgewidth=2)
+        _, fs_label, _, _ = self._font_sizes()
         self.ax.annotate(
             f"{len(self.selected_points)}",
             (peak_x, peak_y_norm),
             textcoords="offset points",
             xytext=(0, 12),
             ha='center',
-            fontsize=11,
+            fontsize=max(8, fs_label),
             fontweight='bold',
             color=Colors.DANGER,
             bbox=dict(boxstyle='round,pad=0.2', facecolor='white', edgecolor=Colors.DANGER, alpha=0.9)

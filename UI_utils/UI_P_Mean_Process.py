@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QListWidget, QGroupBox, QFormLayout, QSplitter,
     QProgressBar, QFrame, QSizePolicy, QScrollArea
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -53,7 +53,10 @@ def median_filter(data, kernel_size=5):
 
 
 class DualPlotCanvas(FigureCanvas):
-    """Canvas with two subplots for current view and comparison."""
+    """Canvas with two subplots for current view and comparison.
+
+    Font sizes adapt automatically to canvas dimensions.
+    """
 
     def __init__(self, parent=None, width=10, height=8, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
@@ -66,51 +69,86 @@ class DualPlotCanvas(FigureCanvas):
         super().__init__(self.fig)
         self.setParent(parent)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumSize(200, 200)
 
         self._style_axes()
+        self.draw()
+
+    def sizeHint(self):
+        return QSize(400, 300)
+
+    def minimumSizeHint(self):
+        return QSize(200, 200)
+
+    def _font_sizes(self):
+        """Calculate font sizes based on current canvas width."""
+        w = self.width()
+        title = max(9, min(16, int(w / 40)))
+        label = max(8, min(13, int(w / 50)))
+        tick = max(7, min(12, int(w / 55)))
+        legend = max(7, min(11, int(w / 55)))
+        return title, label, tick, legend
 
     def _style_axes(self):
         """Apply consistent dark theme styling to axes."""
+        fs_title, fs_label, fs_tick, _ = self._font_sizes()
         for ax in [self.ax_current, self.ax_compare]:
             ax.set_facecolor(Colors.BG_TERTIARY)
             ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-            ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
-            ax.spines['bottom'].set_color(Colors.BORDER)
-            ax.spines['top'].set_color(Colors.BORDER)
-            ax.spines['left'].set_color(Colors.BORDER)
-            ax.spines['right'].set_color(Colors.BORDER)
+            ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
+            for spine in ax.spines.values():
+                spine.set_color(Colors.BORDER)
 
-        self.ax_current.set_title("Current Spectrum", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_compare.set_title("Processing Comparison", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_current.set_title("Current Spectrum", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_compare.set_title("Processing Comparison", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
         self.fig.tight_layout(pad=2.0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Re-apply font sizes on resize
+        fs_title, fs_label, fs_tick, fs_legend = self._font_sizes()
+        for ax in [self.ax_current, self.ax_compare]:
+            ax.title.set_fontsize(fs_title)
+            ax.xaxis.label.set_fontsize(fs_label)
+            ax.yaxis.label.set_fontsize(fs_label)
+            ax.tick_params(labelsize=fs_tick)
+            legend = ax.get_legend()
+            if legend:
+                for text in legend.get_texts():
+                    text.set_fontsize(fs_legend)
+        self.fig.tight_layout(pad=2.0)
+        self.draw_idle()
+
+    def _apply_ax_style(self, ax):
+        """Apply dark theme styling to an axis."""
+        _, _, fs_tick, _ = self._font_sizes()
+        ax.set_facecolor(Colors.BG_TERTIARY)
+        ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
+        ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
+        for spine in ax.spines.values():
+            spine.set_color(Colors.BORDER)
 
     def plot_current(self, wvn, spect, title=None):
         """Plot the current spectrum state."""
+        fs_title, fs_label, _, fs_legend = self._font_sizes()
         self.ax_current.clear()
         self._apply_ax_style(self.ax_current)
         if wvn is not None and len(wvn) == len(spect):
             self.ax_current.plot(wvn, spect, color=Colors.PRIMARY, linewidth=1.5, label='Current')
-            self.ax_current.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=12, color=Colors.TEXT_SECONDARY)
+            self.ax_current.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
         else:
             self.ax_current.plot(spect, color=Colors.PRIMARY, linewidth=1.5, label='Current')
-            self.ax_current.set_xlabel("Index", fontsize=12, color=Colors.TEXT_SECONDARY)
+            self.ax_current.set_xlabel("Index", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
 
-        self.ax_current.set_ylabel("Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
-        self.ax_current.set_title(title or "Current Spectrum", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_current.legend(loc='best', fontsize=11, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        self.ax_current.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+        self.ax_current.set_title(title or "Current Spectrum", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_current.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
-    def _apply_ax_style(self, ax):
-        """Apply dark theme styling to an axis."""
-        ax.set_facecolor(Colors.BG_TERTIARY)
-        ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-        ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
-        for spine in ax.spines.values():
-            spine.set_color(Colors.BORDER)
-
     def plot_comparison(self, wvn, before, after, before_label="Before", after_label="After"):
         """Plot before/after comparison."""
+        fs_title, fs_label, _, fs_legend = self._font_sizes()
         self.ax_compare.clear()
         self._apply_ax_style(self.ax_compare)
 
@@ -118,36 +156,37 @@ class DualPlotCanvas(FigureCanvas):
             self.ax_compare.plot(wvn, before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.7, label=before_label)
             if after is not None and len(after) == len(wvn):
                 self.ax_compare.plot(wvn, after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
-            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=12, color=Colors.TEXT_SECONDARY)
+            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
         else:
             self.ax_compare.plot(before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.7, label=before_label)
             if after is not None:
                 self.ax_compare.plot(after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
-            self.ax_compare.set_xlabel("Index", fontsize=12, color=Colors.TEXT_SECONDARY)
+            self.ax_compare.set_xlabel("Index", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
 
-        self.ax_compare.set_ylabel("Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
-        self.ax_compare.set_title("Processing Comparison", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_compare.legend(loc='best', fontsize=11, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        self.ax_compare.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+        self.ax_compare.set_title("Processing Comparison", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_compare.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
     def plot_polyfit(self, wvn, spect, baseline):
         """Plot spectrum with polyfit baseline."""
+        fs_title, fs_label, _, fs_legend = self._font_sizes()
         self.ax_compare.clear()
         self._apply_ax_style(self.ax_compare)
 
         if wvn is not None and len(wvn) == len(spect):
             self.ax_compare.plot(wvn, spect, color=Colors.PRIMARY, linewidth=1.5, label='Spectrum')
             self.ax_compare.plot(wvn, baseline, color=Colors.DANGER, linestyle='--', linewidth=1.8, label='Polyfit Baseline')
-            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=12, color=Colors.TEXT_SECONDARY)
+            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
         else:
             self.ax_compare.plot(spect, color=Colors.PRIMARY, linewidth=1.5, label='Spectrum')
             self.ax_compare.plot(baseline, color=Colors.DANGER, linestyle='--', linewidth=1.8, label='Polyfit Baseline')
-            self.ax_compare.set_xlabel("Index", fontsize=12, color=Colors.TEXT_SECONDARY)
+            self.ax_compare.set_xlabel("Index", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
 
-        self.ax_compare.set_ylabel("Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
-        self.ax_compare.set_title("Polyfit Baseline Preview", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_compare.legend(loc='best', fontsize=11, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        self.ax_compare.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+        self.ax_compare.set_title("Polyfit Baseline Preview", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_compare.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
         self.ax_compare.fill_between(
             wvn if wvn is not None and len(wvn) == len(spect) else range(len(spect)),
             baseline, spect, alpha=0.2, color=Colors.SUCCESS, label='Background'
@@ -157,52 +196,96 @@ class DualPlotCanvas(FigureCanvas):
 
 
 class StepIndicator(QWidget):
-    """Visual step progress indicator."""
+    """Visual step progress indicator.
+
+    Current and next steps show full name; others show only the step number.
+    """
 
     def __init__(self, steps, parent=None):
         super().__init__(parent)
         self.steps = steps
         self.current_index = 0
-        self.step_labels = []
+        self.step_labels = []  # list of (frame, label, index)
         self._build_ui()
 
     def _build_ui(self):
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(2)
+        self._layout = QHBoxLayout(self)
+        self._layout.setContentsMargins(4, 4, 4, 4)
+        self._layout.setSpacing(3)
 
         for i, step in enumerate(self.steps):
-            # Step indicator
             frame = QFrame()
-            frame.setFixedHeight(30)
+            frame.setFixedHeight(38)
             frame_layout = QHBoxLayout(frame)
-            frame_layout.setContentsMargins(5, 2, 5, 2)
+            frame_layout.setContentsMargins(6, 3, 6, 3)
 
-            label = QLabel(f"{i}. {step[:12]}..." if len(step) > 15 else f"{i}. {step}")
+            label = QLabel()
             label.setAlignment(Qt.AlignCenter)
-            label.setFont(QFont("Arial", 8))
-            label.setToolTip(step)
+            label.setToolTip(f"Step {i}: {step}")
             frame_layout.addWidget(label)
 
-            self.step_labels.append((frame, label))
-            layout.addWidget(frame)
+            self.step_labels.append((frame, label, i))
+            self._layout.addWidget(frame)
 
         self._update_styles()
 
     def _update_styles(self):
-        for i, (frame, label) in enumerate(self.step_labels):
+        for frame, label, i in self.step_labels:
+            # Determine if this step should show full text
+            is_focus = (i == self.current_index or i == self.current_index + 1)
+
+            if is_focus:
+                label.setText(f"{i}. {self.steps[i]}")
+                frame.setMinimumWidth(0)
+            else:
+                label.setText(f"{i}")
+                frame.setFixedWidth(32)
+
             if i < self.current_index:
                 # Completed
-                frame.setStyleSheet(f"background-color: {Colors.SUCCESS}; border-radius: 6px;")
-                label.setStyleSheet(f"color: {Colors.BG_DARK}; font-weight: bold; font-size: {Fonts.SIZE_XS}px;")
+                frame.setStyleSheet(
+                    f"background-color: {Colors.SUCCESS}; border-radius: 6px; "
+                    f"border: 2px solid {Colors.SUCCESS};"
+                )
+                label.setStyleSheet(
+                    f"color: {Colors.BG_DARK}; font-weight: bold; "
+                    f"font-size: {Fonts.SIZE_SM}px;"
+                )
             elif i == self.current_index:
-                # Current
-                frame.setStyleSheet(f"background-color: {Colors.PRIMARY}; border-radius: 6px;")
-                label.setStyleSheet(f"color: {Colors.BG_DARK}; font-weight: bold; font-size: {Fonts.SIZE_XS}px;")
+                # Current — highlighted
+                frame.setStyleSheet(
+                    f"background-color: {Colors.PRIMARY}; border-radius: 6px; "
+                    f"border: 2px solid #79C0FF;"
+                )
+                label.setStyleSheet(
+                    f"color: {Colors.BG_DARK}; font-weight: bold; "
+                    f"font-size: {Fonts.SIZE_SM}px;"
+                )
+            elif i == self.current_index + 1:
+                # Next step — slightly highlighted
+                frame.setStyleSheet(
+                    f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px; "
+                    f"border: 2px solid {Colors.PRIMARY};"
+                )
+                label.setStyleSheet(
+                    f"color: {Colors.TEXT_PRIMARY}; font-weight: bold; "
+                    f"font-size: {Fonts.SIZE_SM}px;"
+                )
             else:
-                # Pending
-                frame.setStyleSheet(f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px;")
-                label.setStyleSheet(f"color: {Colors.TEXT_TERTIARY}; font-size: {Fonts.SIZE_XS}px;")
+                # Other pending
+                frame.setStyleSheet(
+                    f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px; "
+                    f"border: 1px solid {Colors.BORDER};"
+                )
+                label.setStyleSheet(
+                    f"color: {Colors.TEXT_TERTIARY}; "
+                    f"font-size: {Fonts.SIZE_SM}px;"
+                )
+
+            # Reset width constraint for focus steps
+            if is_focus:
+                frame.setMaximumWidth(16777215)  # QWIDGETSIZE_MAX
+                frame.setMinimumWidth(0)
 
     def set_step(self, index):
         self.current_index = min(max(0, index), len(self.steps))
@@ -279,7 +362,8 @@ class P_Mean_Process_UI(QMainWindow):
         # Step indicator (scrollable)
         step_scroll = QScrollArea()
         step_scroll.setWidgetResizable(True)
-        step_scroll.setFixedHeight(50)
+        step_scroll.setFixedHeight(56)
+        step_scroll.setFrameShape(QFrame.NoFrame)
         step_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         self.step_indicator = StepIndicator(self.processing_steps)
         step_scroll.setWidget(self.step_indicator)
@@ -497,7 +581,11 @@ class P_Mean_Process_UI(QMainWindow):
 
         # Status bar
         self.lbl_status = QLabel("Ready. Load data files to begin processing.")
-        self.lbl_status.setStyleSheet("padding: 5px; background-color: #e9ecef; border-radius: 3px;")
+        self.lbl_status.setStyleSheet(
+            f"padding: 5px; background-color: {Colors.BG_TERTIARY}; "
+            f"color: {Colors.TEXT_SECONDARY}; border-radius: 3px; "
+            f"border: 1px solid {Colors.BORDER};"
+        )
         right_layout.addWidget(self.lbl_status)
 
         # Add to splitter

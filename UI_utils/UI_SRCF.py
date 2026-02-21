@@ -31,7 +31,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QSpinBox, QDoubleSpinBox, QSplitter, QWidget, QStatusBar,
     QScrollArea, QSizePolicy
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -380,6 +380,12 @@ class SRCF_UI(QDialog):
 
         self.canvas = FigureCanvas(self.fig)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.canvas.setMinimumSize(200, 200)
+        # Override sizeHint to prevent canvas from dominating splitter
+        self.canvas.sizeHint = lambda: QSize(400, 300)
+        self.canvas.minimumSizeHint = lambda: QSize(200, 200)
+        self.canvas.draw()
+        self.canvas.mpl_connect('resize_event', self._on_canvas_resize)
         self.toolbar = NavigationToolbar(self.canvas, self)
 
         right_layout.addWidget(self.toolbar)
@@ -399,16 +405,41 @@ class SRCF_UI(QDialog):
         self.status_bar.showMessage("Ready. Select a correction method to begin.")
         main_layout.addWidget(self.status_bar)
 
+    def _canvas_font_sizes(self):
+        """Calculate font sizes based on canvas width."""
+        w = self.canvas.width() if hasattr(self, 'canvas') else 400
+        title = max(9, min(16, int(w / 40)))
+        label = max(8, min(13, int(w / 50)))
+        tick = max(7, min(12, int(w / 55)))
+        legend = max(7, min(11, int(w / 55)))
+        return title, label, tick, legend
+
+    def _on_canvas_resize(self, event):
+        """Re-apply font sizes when canvas is resized."""
+        fs_title, fs_label, fs_tick, fs_legend = self._canvas_font_sizes()
+        for ax in [self.ax_corr, self.ax_compare]:
+            ax.title.set_fontsize(fs_title)
+            ax.xaxis.label.set_fontsize(fs_label)
+            ax.yaxis.label.set_fontsize(fs_label)
+            ax.tick_params(labelsize=fs_tick)
+            legend = ax.get_legend()
+            if legend:
+                for text in legend.get_texts():
+                    text.set_fontsize(fs_legend)
+        self.fig.tight_layout(pad=2.5)
+        self.canvas.draw_idle()
+
     def _style_axes(self):
         """Apply dark theme styling to matplotlib axes."""
+        fs_title, _, fs_tick, _ = self._canvas_font_sizes()
         for ax in [self.ax_corr, self.ax_compare]:
             ax.set_facecolor(Colors.BG_TERTIARY)
             ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-            ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
+            ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
             for spine in ax.spines.values():
                 spine.set_color(Colors.BORDER)
-        self.ax_corr.set_title("Correction Factor", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_compare.set_title("Spectrum Comparison", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_corr.set_title("Correction Factor", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_compare.set_title("Spectrum Comparison", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
 
     # ============================================================
     # Method Selection
@@ -720,6 +751,7 @@ class SRCF_UI(QDialog):
 
     def _plot_correction_factor(self):
         """Plot the correction factor."""
+        fs_title, fs_label, _, _ = self._canvas_font_sizes()
         self.ax_corr.clear()
 
         if self.corr is None:
@@ -727,17 +759,15 @@ class SRCF_UI(QDialog):
             return
 
         if self.wvn is not None and len(self.wvn) == len(self.corr):
-            # Plot vs wavelength (convert cm^-1 to nm)
             wavelength = 1e7 / self.wvn
             self.ax_corr.plot(wavelength, self.corr, 'b-', linewidth=1.5)
-            self.ax_corr.set_xlabel("Wavelength (nm)")
+            self.ax_corr.set_xlabel("Wavelength (nm)", fontsize=fs_label)
         else:
-            # Plot vs index
             self.ax_corr.plot(np.arange(len(self.corr)), self.corr, 'b-', linewidth=1.5)
-            self.ax_corr.set_xlabel("Index")
+            self.ax_corr.set_xlabel("Index", fontsize=fs_label)
 
-        self.ax_corr.set_ylabel("Correction Factor")
-        self.ax_corr.set_title("Spectral Response Correction Factor")
+        self.ax_corr.set_ylabel("Correction Factor", fontsize=fs_label)
+        self.ax_corr.set_title("Spectral Response Correction Factor", fontsize=fs_title, fontweight='bold')
         self.ax_corr.grid(True, alpha=0.3)
 
         self.fig.tight_layout(pad=3.0)
@@ -745,6 +775,7 @@ class SRCF_UI(QDialog):
 
     def _plot_comparison(self):
         """Plot comparison between original and corrected spectrum."""
+        fs_title, fs_label, _, fs_legend = self._canvas_font_sizes()
         self.ax_compare.clear()
 
         if self.raw_spectrum is None:
@@ -755,7 +786,6 @@ class SRCF_UI(QDialog):
         if self.corrected_spectrum is not None:
             min_len = min(len(self.raw_spectrum), len(self.corrected_spectrum))
 
-        # Determine x-axis
         if self.wvn is not None and len(self.wvn) >= min_len:
             x_axis = self.wvn[:min_len]
             xlabel = "Wavenumber (cm⁻¹)"
@@ -763,23 +793,21 @@ class SRCF_UI(QDialog):
             x_axis = np.arange(min_len)
             xlabel = "Index"
 
-        # Plot original spectrum
         self.ax_compare.plot(
             x_axis, self.raw_spectrum[:min_len],
             'b-', linewidth=1, alpha=0.7, label='Original'
         )
 
-        # Plot corrected spectrum if available
         if self.corrected_spectrum is not None:
             self.ax_compare.plot(
                 x_axis, self.corrected_spectrum[:min_len],
                 'r-', linewidth=1, alpha=0.7, label='Corrected'
             )
 
-        self.ax_compare.set_xlabel(xlabel)
-        self.ax_compare.set_ylabel("Intensity")
-        self.ax_compare.set_title("Original vs Corrected Spectrum")
-        self.ax_compare.legend(loc='best')
+        self.ax_compare.set_xlabel(xlabel, fontsize=fs_label)
+        self.ax_compare.set_ylabel("Intensity", fontsize=fs_label)
+        self.ax_compare.set_title("Original vs Corrected Spectrum", fontsize=fs_title, fontweight='bold')
+        self.ax_compare.legend(loc='best', fontsize=fs_legend)
         self.ax_compare.grid(True, alpha=0.3)
 
         self.fig.tight_layout(pad=3.0)
@@ -815,7 +843,7 @@ class SRCF_UI(QDialog):
         try:
             np.savetxt(
                 fp, self.corr.reshape(-1, 1),
-                delimiter=",", header="Correction_Factor", comments=''
+                delimiter=","
             )
             self.status_bar.showMessage(f"Correction factor saved: {fp}")
             QMessageBox.information(self, "Saved", f"Correction factor saved to:\n{fp}")
@@ -854,7 +882,7 @@ class SRCF_UI(QDialog):
                 data = self.corrected_spectrum.reshape(-1, 1)
                 header = "Corrected_Intensity"
 
-            np.savetxt(fp, data, delimiter=",", header=header, comments='')
+            np.savetxt(fp, data, delimiter=",")
             self.status_bar.showMessage(f"Corrected spectrum saved: {fp}")
             QMessageBox.information(self, "Saved", f"Corrected spectrum saved to:\n{fp}")
         except Exception as e:

@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QGroupBox, QFormLayout, QProgressBar, QTextEdit,
     QSplitter, QSizePolicy, QCheckBox, QScrollArea, QFrame
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QFont, QTextCursor
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -223,7 +223,7 @@ class BatchWorker(QThread):
 
 
 class PreviewCanvas(FigureCanvas):
-    """Canvas for preview plot with dark theme."""
+    """Canvas for preview plot with dark theme. Font sizes adapt to canvas size."""
 
     def __init__(self, parent=None, width=6, height=4, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
@@ -232,17 +232,49 @@ class PreviewCanvas(FigureCanvas):
         super().__init__(self.fig)
         self.setParent(parent)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.setMinimumSize(200, 150)
         self._style_axis()
+        self.draw()
+
+    def sizeHint(self):
+        return QSize(400, 300)
+
+    def minimumSizeHint(self):
+        return QSize(200, 150)
+
+    def _font_sizes(self):
+        w = self.width()
+        title = max(9, min(16, int(w / 40)))
+        label = max(8, min(13, int(w / 50)))
+        tick = max(7, min(12, int(w / 55)))
+        legend = max(7, min(11, int(w / 55)))
+        return title, label, tick, legend
 
     def _style_axis(self):
+        fs_title, _, fs_tick, _ = self._font_sizes()
         self.ax.set_facecolor(Colors.BG_TERTIARY)
         self.ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-        self.ax.tick_params(labelsize=11, colors=Colors.TEXT_SECONDARY)
+        self.ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
         for spine in self.ax.spines.values():
             spine.set_color(Colors.BORDER)
-        self.ax.set_title("Preview", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax.set_title("Preview", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        fs_title, fs_label, fs_tick, fs_legend = self._font_sizes()
+        self.ax.title.set_fontsize(fs_title)
+        self.ax.xaxis.label.set_fontsize(fs_label)
+        self.ax.yaxis.label.set_fontsize(fs_label)
+        self.ax.tick_params(labelsize=fs_tick)
+        legend = self.ax.get_legend()
+        if legend:
+            for text in legend.get_texts():
+                text.set_fontsize(fs_legend)
+        self.fig.tight_layout(pad=2.0)
+        self.draw_idle()
 
     def plot_preview(self, wvn_before, spect_before, wvn_after, spect_after, filename=""):
+        fs_title, fs_label, _, fs_legend = self._font_sizes()
         self.ax.clear()
         self._style_axis()
 
@@ -256,11 +288,11 @@ class PreviewCanvas(FigureCanvas):
         else:
             self.ax.plot(spect_after, color=Colors.SUCCESS, linewidth=1.5, label='Processed')
 
-        self.ax.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=12, color=Colors.TEXT_SECONDARY)
-        self.ax.set_ylabel("Intensity", fontsize=12, color=Colors.TEXT_SECONDARY)
-        self.ax.set_title(f"Preview: {filename}", fontsize=14, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax.legend(loc='best', fontsize=11, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
-        self.fig.tight_layout()
+        self.ax.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+        self.ax.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+        self.ax.set_title(f"Preview: {filename}", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        self.fig.tight_layout(pad=2.0)
         self.draw()
 
     def clear_plot(self):
