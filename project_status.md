@@ -31,6 +31,13 @@ TRaP is a PyQt5 desktop application for standardized Raman spectroscopy processi
 - No tests or CI to validate spectral algorithms or UI flows.
 - Requirements are documented in README but not pinned (no `requirements.txt`/`pyproject.toml`).
 - `docs/Document.pdf` may contain critical usage or algorithm details; not yet summarized here.
+- Build outputs are generated locally and should not be committed.
+
+## Build Output Hygiene (Do Not Commit)
+When running `build_exe.py`, the following artifacts are created locally and should be kept out of version control:
+- `build/`
+- `dist/`
+- `TRaP.spec`
 
 ## Suggested Next Steps
 1. Add a `requirements.txt` or `pyproject.toml` with pinned versions for reproducibility.
