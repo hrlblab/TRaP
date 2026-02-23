@@ -217,7 +217,11 @@ class BatchWorker(QThread):
 
             except Exception as e:
                 fail_count += 1
-                self.log.emit(f"[ERR] {os.path.basename(path)}: {str(e)}", "error")
+                err_type = type(e).__name__
+                self.log.emit(
+                    f"[ERR] {os.path.basename(path)}: {err_type}: {e} (output: {self.output_folder})",
+                    "error"
+                )
 
         self.finished.emit(processed_files, fail_count)
 
@@ -506,6 +510,18 @@ class BatchPMeanUI(QMainWindow):
         self.edit_output.setMinimumHeight(32)
         out_layout.addWidget(self.edit_output, 1)
         files_layout.addLayout(out_layout)
+
+        # Optional subfolder
+        sub_layout = QHBoxLayout()
+        sub_layout.setSpacing(8)
+        lbl_sub = QLabel("Subfolder")
+        lbl_sub.setMinimumWidth(120)
+        sub_layout.addWidget(lbl_sub)
+        self.edit_subfolder = QLineEdit()
+        self.edit_subfolder.setPlaceholderText("Optional (e.g. Run_01)")
+        self.edit_subfolder.setMinimumHeight(32)
+        sub_layout.addWidget(self.edit_subfolder, 1)
+        files_layout.addLayout(sub_layout)
 
         left_layout.addWidget(files_group)
 
@@ -865,7 +881,16 @@ class BatchPMeanUI(QMainWindow):
             output_folder = self.output_root
         else:
             output_folder = os.path.join(os.path.dirname(self.data_files[0]), "Processed")
-        os.makedirs(output_folder, exist_ok=True)
+        subfolder = self.edit_subfolder.text().strip()
+        if subfolder:
+            output_folder = os.path.join(output_folder, subfolder)
+        try:
+            os.makedirs(output_folder, exist_ok=True)
+        except Exception as e:
+            err_type = type(e).__name__
+            self._log(f"Failed to create output folder '{output_folder}': {err_type}: {e}", "error")
+            QMessageBox.warning(self, "Error", f"Failed to create output folder:\n{output_folder}\n\n{err_type}: {e}")
+            return
 
         # Disable controls
         self.btn_start.setEnabled(False)
