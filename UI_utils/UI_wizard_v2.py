@@ -436,7 +436,7 @@ class SystemSelectWizard(QWidget):
         2: "Apply spectral response correction using White-Light or NIST/SRM method. "
            "Upload raw spectra to see before/after comparison and save corrected results.",
         3: "Process individual spectra through the complete pipeline: baseline subtraction, "
-           "response correction, truncation, binning, denoising, and normalization.",
+           "response correction, truncation, binning, noise smoothing, and normalization.",
         4: "Apply batch processing to multiple spectra using the same configuration. "
            "Ideal for processing large datasets with consistent parameters."
     }

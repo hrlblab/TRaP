@@ -327,9 +327,9 @@ class P_Mean_Process_UI(QMainWindow):
             "CosmicRayRemoval",
             "Truncate",
             "Binning",
-            "Denoise",
             "Polyfit Preview",
             "FluorescenceBackgroundSubtraction",
+            "Noise Smoothing",
             "Normalization"
         ]
         self.current_step_index = 0
@@ -396,8 +396,8 @@ class P_Mean_Process_UI(QMainWindow):
 
         left_layout.addWidget(params_group)
 
-        # Denoise Group
-        denoise_group = QGroupBox("Denoise Settings")
+        # Noise smoothing group
+        denoise_group = QGroupBox("Noise Smoothing Settings")
         denoise_layout = QFormLayout(denoise_group)
         denoise_layout.setSpacing(8)
         denoise_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
@@ -810,27 +810,6 @@ class P_Mean_Process_UI(QMainWindow):
                 self.current_wvn = new_wvn
                 self.operations.append(f"Binning(binwidth={binwidth})")
 
-            elif step == "Denoise":
-                method = self.combo_denoise.currentText()
-                if method == "Savitzky-Golay":
-                    sg_order = int(self.edit_sgorder.text())
-                    sg_frame = int(self.edit_sgframe.text())
-                    if sg_frame < 3 or sg_frame % 2 == 0:
-                        QMessageBox.warning(self, "Error", "SGframe must be odd >= 3!")
-                        return
-                    self.current_spect = Denoise(self.current_spect, SGorder=sg_order, SGframe=sg_frame)
-                    self.operations.append(f"Denoise(SG,o={sg_order},f={sg_frame})")
-                elif method == "Moving Average":
-                    w = int(self.edit_mawindow.text())
-                    self.current_spect = moving_average(self.current_spect.flatten(), window=w)
-                    self.operations.append(f"Denoise(MA,w={w})")
-                elif method == "Median Filter":
-                    k = int(self.edit_mediank.text())
-                    self.current_spect = median_filter(self.current_spect.flatten(), kernel_size=k)
-                    self.operations.append(f"Denoise(Med,k={k})")
-                else:
-                    self.operations.append("Denoise(None)")
-
             elif step == "Polyfit Preview":
                 polyorder = int(self.edit_polyorder.text())
                 base, _ = FluorescenceBackgroundSubtraction(self.current_spect.flatten(), polyorder)
@@ -851,6 +830,27 @@ class P_Mean_Process_UI(QMainWindow):
                 )
                 self.current_spect = finalSpect
                 self.operations.append(f"FBS(order={polyorder})")
+
+            elif step == "Noise Smoothing":
+                method = self.combo_denoise.currentText()
+                if method == "Savitzky-Golay":
+                    sg_order = int(self.edit_sgorder.text())
+                    sg_frame = int(self.edit_sgframe.text())
+                    if sg_frame < 3 or sg_frame % 2 == 0:
+                        QMessageBox.warning(self, "Error", "SGframe must be odd >= 3!")
+                        return
+                    self.current_spect = Denoise(self.current_spect, SGorder=sg_order, SGframe=sg_frame)
+                    self.operations.append(f"NoiseSmoothing(SG,o={sg_order},f={sg_frame})")
+                elif method == "Moving Average":
+                    w = int(self.edit_mawindow.text())
+                    self.current_spect = moving_average(self.current_spect.flatten(), window=w)
+                    self.operations.append(f"NoiseSmoothing(MA,w={w})")
+                elif method == "Median Filter":
+                    k = int(self.edit_mediank.text())
+                    self.current_spect = median_filter(self.current_spect.flatten(), kernel_size=k)
+                    self.operations.append(f"NoiseSmoothing(Med,k={k})")
+                else:
+                    self.operations.append("NoiseSmoothing(None)")
 
             elif step == "Normalization":
                 self.current_spect = Normalize(self.current_spect)

@@ -184,7 +184,7 @@ class SystemSelectWizard(QWidget):
                "If you already have the X-axis calibration (.mat) and/or spectral response correction file, enable the toggles below to skip Step 1/2.",
             1: "Calibrate the X-axis (wavenumber). If you already have a .mat calibration file, go back to Step 0 and enable the toggle to skip.",
             2: "Apply or confirm spectral response correction. If already prepared, go back to Step 0 and enable the toggle to skip.",
-            3: "Process a single spectrum step-by-step (baseline, response correction, truncate, binning, denoise, polyfit/FBS, normalization).",
+            3: "Process a single spectrum step-by-step (baseline, response correction, truncate, binning, polyfit/FBS, noise smoothing, normalization).",
             4: "Run P-Mean batch processing on multiple spectra with the same configuration."
         }
 

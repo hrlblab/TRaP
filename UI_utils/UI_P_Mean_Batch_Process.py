@@ -100,28 +100,28 @@ def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, confi
     binwidth = float(config.get("BinWidth", 3.5))
     binned_spect, new_wvn = Binning(wvn_trunc[0], wvn_trunc[-1], wvn_trunc, spect_trunc, binwidth=binwidth)
 
-    # 4) Denoise
+    # 4) Fluorescence background subtraction
+    polyorder = int(config.get("Polyorder", 7))
+    _, fbs_spect = FluorescenceBackgroundSubtraction(binned_spect, polyorder)
+
+    # 5) Noise smoothing
     method = str(config.get("DenoiseMethod", "Savitzky-Golay"))
     if method == "Savitzky-Golay":
         SGorder = int(config.get("SGorder", 2))
         SGframe = int(config.get("SGframe", 7))
-        processed_spect = Denoise(binned_spect, SGorder=SGorder, SGframe=SGframe)
+        finalSpect = Denoise(fbs_spect, SGorder=SGorder, SGframe=SGframe)
     elif method == "Moving Average":
         MAWindow = max(1, int(config.get("MAWindow", 5)))
         kernel = np.ones(MAWindow, dtype=np.float64) / MAWindow
-        processed_spect = np.convolve(binned_spect, kernel, mode='same')
+        finalSpect = np.convolve(fbs_spect, kernel, mode='same')
     elif method == "Median Filter":
         from scipy.signal import medfilt
         MedianKernel = int(config.get("MedianKernel", 5))
         if MedianKernel % 2 == 0:
             MedianKernel += 1
-        processed_spect = medfilt(binned_spect, kernel_size=MedianKernel)
+        finalSpect = medfilt(fbs_spect, kernel_size=MedianKernel)
     else:
-        processed_spect = binned_spect
-
-    # 5) Fluorescence background subtraction
-    polyorder = int(config.get("Polyorder", 7))
-    _, finalSpect = FluorescenceBackgroundSubtraction(processed_spect, polyorder)
+        finalSpect = fbs_spect
 
     return new_wvn, finalSpect
 
@@ -377,14 +377,14 @@ class BatchPMeanUI(QMainWindow):
         params_form.addRow("Polyorder:", self.edit_poly)
         params_form.addRow("BinWidth:", self.edit_binw)
 
-        # Denoise settings
+        # Noise smoothing settings
         self.combo_denoise = QComboBox()
         self.combo_denoise.addItems(["Savitzky-Golay", "Moving Average", "Median Filter", "None"])
         self.combo_denoise.setCurrentText(self.config.get("DenoiseMethod", "Savitzky-Golay"))
         self.combo_denoise.currentIndexChanged.connect(self._update_denoise_visibility)
         self.combo_denoise.currentIndexChanged.connect(self._mark_config_modified)
         self.combo_denoise.setMinimumHeight(32)
-        params_form.addRow("Denoise Method:", self.combo_denoise)
+        params_form.addRow("Noise Smoothing Method:", self.combo_denoise)
 
         self.edit_sgorder = QLineEdit(str(self.config["SGorder"]))
         self.edit_sgorder.setMinimumHeight(32)

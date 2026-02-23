@@ -9,7 +9,7 @@ Developed at **Vanderbilt Biophotonics Center**.
 - **5-step wizard workflow** guiding users through the complete processing pipeline
 - **X-axis calibration** using Neon-Argon and Acetaminophen reference spectra
 - **Spectral response correction** via White-Light, NIST SRM, or pre-computed factors
-- **Full preprocessing pipeline**: baseline subtraction, cosmic ray removal, binning, denoising (Savitzky-Golay / Moving Average / Median), fluorescence background removal, and normalization
+- **Full preprocessing pipeline**: baseline subtraction, cosmic ray removal, binning, fluorescence background subtraction, noise smoothing (Savitzky-Golay / Moving Average / Median), and normalization
 - **Batch processing** for multiple spectrum files
 - **Configuration management** with save/load support
 - **Real-time visualization** with before/after comparison
@@ -54,8 +54,8 @@ Step 4: Batch Processing              /
 | 3 | Cosmic Ray Removal | Detect and remove spike noise |
 | 4 | Truncation | Extract wavenumber range (default: 900-1700 cm-1) |
 | 5 | Binning | Rebin to uniform spacing (default: 3.5 cm-1) |
-| 6 | Denoising | Savitzky-Golay / Moving Average / Median filter |
-| 7 | Fluorescence Background | Polynomial baseline subtraction |
+| 6 | Fluorescence Background | Polynomial baseline subtraction |
+| 7 | Noise Smoothing | Savitzky-Golay / Moving Average / Median filter |
 | 8 | Normalization | Scale to mean intensity |
 
 ## Supported File Formats
