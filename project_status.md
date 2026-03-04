@@ -27,7 +27,7 @@ TRaP is a PyQt5 desktop application for standardized Raman spectroscopy processi
 - Build script is present and configured to bundle data and resources.
 - No automated test suite or CI configuration is present in the repository.
 
-## Recent Changes (2026-03-04)
+## Recent Changes (2026-03-04 continued)
 
 ### Bug Fix — Renishaw X-axis starting from 0 (`UI_P_Mean_Process.py`)
 - **Root cause**: `rdata.load_spectrum_data()` always strips column 0 (wavenumber) and returns intensity-only `(N,1)`. The Renishaw load branch used this function and could never recover the wavenumber, falling back to `np.arange(...)`.
@@ -39,6 +39,11 @@ TRaP is a PyQt5 desktop application for standardized Raman spectroscopy processi
 - Visual elements: dashed vertical line, orange dot marker on the curve, floating tooltip near the data point.
 - Tooltip position is adaptive: flips offset direction when the cursor is near the right or top edge of the axes to avoid clipping.
 - Elements are hidden when the cursor leaves the axes.
+
+### Bug Fix — White-Light correction 报错 tuple index out of range (`utils/WLCorrection.py`, `UI_utils/UI_SRCF.py`)
+- **Bug 1**：`lsqpolyval` 返回 `(yy, erryy)` tuple，原代码直接赋值给 `true_WL` 导致后续索引越界。修复：解包为 `true_WL, _ = lsqpolyval(...)` 并 `.flatten()`。
+- **Bug 2**：Raman shift → 散射波长换算公式错误。原代码 `10e-7 / cal_wvn` 结果约 `5e-10`，远超参考文件范围（750–980 nm）。正确公式：`1e7 / (1e7/laser_wavelength - cal_wvn)`。
+- **Bug 3**：`UI_SRCF.py` 加载校准文件时未读取激光波长字段。现从 `Cal['Wavelength']` 提取并存入 `self.laser_wavelength`，传入计算函数。默认值保留 785.0 nm 作为兜底。
 
 ## Known Gaps / Risks
 - No tests or CI to validate spectral algorithms or UI flows.

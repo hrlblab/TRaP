@@ -68,6 +68,7 @@ class SRCF_UI(QDialog):
         # ============ Data and State ============
         self.result = None
         self.wvn = None  # Wavenumber array from calibration
+        self.laser_wavelength = 785.0  # Default, overwritten from calibration file
         self.corr = None  # Correction factor array
         self.mode = "WL"  # "WL", "NIST", "EXIST"
 
@@ -495,12 +496,14 @@ class SRCF_UI(QDialog):
                 cal_struct = mat["Cal"]
                 if "Wvn" in cal_struct.dtype.names:
                     self.wvn = cal_struct["Wvn"][0, 0].flatten().astype(float)
+                    if "Wavelength" in cal_struct.dtype.names:
+                        self.laser_wavelength = float(cal_struct["Wavelength"][0, 0].flatten()[0])
                     self.file_wvn_mat = fp
                     self.result = "WvnUploaded"
                     self.lbl_calib_status.setText(f"✓ Loaded ({len(self.wvn)} points)")
                     self.lbl_calib_status.setStyleSheet("color: #28a745;")
                     self.status_bar.showMessage(
-                        f"Calibration loaded: {len(self.wvn)} wavenumber points"
+                        f"Calibration loaded: {len(self.wvn)} points, laser {self.laser_wavelength:.1f} nm"
                     )
                     return True
 
@@ -650,7 +653,8 @@ class SRCF_UI(QDialog):
                 wl_meas, self.wvn, self.wlmax_data,
                 smooth_window=smooth_win,
                 poly_order=poly_order,
-                center_wavelength=center_wl
+                center_wavelength=center_wl,
+                laser_wavelength=self.laser_wavelength
             )
 
             self.result = "CorrComputed"

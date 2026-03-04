@@ -174,6 +174,7 @@ def wl_correction_from_true_and_measured(
     smooth_order: int = 1,
     poly_order: int = 8,
     center_wavelength: float = 860.0,
+    laser_wavelength: float = 785.0,
 ) -> np.ndarray:
     """
     Compute White-Light correction factor using utils modules.
@@ -200,14 +201,16 @@ def wl_correction_from_true_and_measured(
     SWL, _ = utils.savgol.savgol_filter(wl_row, smooth_window, smooth_order, 0)
     SWL = SWL.flatten()
 
-    # Convert wavenumber (cm^-1) -> wavelength
-    Cal_wvlength = 10e-7 / cal_wvn
+    # Convert Raman shift (cm^-1) -> scattered wavelength (nm)
+    # λ_scattered = 1e7 / (1e7/λ_laser - Δν)
+    Cal_wvlength = 1e7 / (1e7 / laser_wavelength - cal_wvn)
 
     # Fit polynomial from manufacturer-provided true WL reference
     p = utils.lsqpolyfit.lsqpolyfit(wlmax_2col[:, 0], wlmax_2col[:, 1], None, poly_order)
 
-    # Evaluate True WL
-    true_WL = utils.lsqpolyval.lsqpolyval(p, Cal_wvlength)
+    # Evaluate True WL (lsqpolyval returns (yy, erryy) tuple)
+    true_WL, _ = utils.lsqpolyval.lsqpolyval(p, Cal_wvlength)
+    true_WL = true_WL.flatten()
 
     # Find approximate center index
     loc = np.searchsorted(Cal_wvlength, center_wavelength, side="left")
