@@ -1,6 +1,6 @@
 # Project Status - Raman_APP (TRaP)
 
-Date: 2026-02-23
+Date: 2026-03-04
 
 ## Summary
 TRaP is a PyQt5 desktop application for standardized Raman spectroscopy processing. It provides a wizard-driven GUI that guides users through configuration, x-axis calibration, spectral response correction, and single/batch spectrum preprocessing. The codebase is organized into UI modules under `UI_utils/` and processing algorithms under `utils/`, with example calibration and sample data included in `data/`.
@@ -22,10 +22,23 @@ TRaP is a PyQt5 desktop application for standardized Raman spectroscopy processi
 - Docs: `docs/Document.pdf` (not analyzed in this summary).
 
 ## Status Assessment
-- Core functionality appears implemented and wired end-to-end via the wizard shell.
+- Core functionality implemented and wired end-to-end via the wizard shell.
 - Pipeline order updated: fluorescence background subtraction now precedes noise smoothing in p-mean processing.
 - Build script is present and configured to bundle data and resources.
 - No automated test suite or CI configuration is present in the repository.
+
+## Recent Changes (2026-03-04)
+
+### Bug Fix — Renishaw X-axis starting from 0 (`UI_P_Mean_Process.py`)
+- **Root cause**: `rdata.load_spectrum_data()` always strips column 0 (wavenumber) and returns intensity-only `(N,1)`. The Renishaw load branch used this function and could never recover the wavenumber, falling back to `np.arange(...)`.
+- **Fix**: Renishaw branch now uses `rdata.read_txt_file()` which returns the full two-column DataFrame; wavenumber (col 0) and intensity (col 1) are extracted separately.
+
+### Feature — Interactive cursor readout on spectrum plots (`UI_P_Mean_Process.py`)
+- Added hover crosshair to both subplots (Current Spectrum + Processing Comparison).
+- On mouse move, the cursor snaps to the nearest data point on the X-axis and displays the true `Wvn (cm⁻¹)` and `I` values from the spectrum array.
+- Visual elements: dashed vertical line, orange dot marker on the curve, floating tooltip near the data point.
+- Tooltip position is adaptive: flips offset direction when the cursor is near the right or top edge of the axes to avoid clipping.
+- Elements are hidden when the cursor leaves the axes.
 
 ## Known Gaps / Risks
 - No tests or CI to validate spectral algorithms or UI flows.

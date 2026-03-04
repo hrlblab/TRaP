@@ -71,7 +71,23 @@ class DualPlotCanvas(FigureCanvas):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumSize(200, 200)
 
+        # Crosshair state
+        self._vline_current = None
+        self._vline_compare = None
+        self._annot_current = None
+        self._annot_compare = None
+        self._dot_current = None
+        self._dot_compare = None
+        # Stored data for snapping: (wvn_array, spect_array) or None
+        self._data_current = None
+        self._data_compare = None
+
         self._style_axes()
+        self._vline_current, self._annot_current, self._dot_current = self._add_crosshair(self.ax_current)
+        self._vline_compare, self._annot_compare, self._dot_compare = self._add_crosshair(self.ax_compare)
+
+        self.mpl_connect('motion_notify_event', self._on_mouse_move)
+        self.mpl_connect('axes_leave_event', self._on_axes_leave)
         self.draw()
 
     def sizeHint(self):
@@ -128,6 +144,88 @@ class DualPlotCanvas(FigureCanvas):
         for spine in ax.spines.values():
             spine.set_color(Colors.BORDER)
 
+    def _add_crosshair(self, ax):
+        """Add invisible crosshair elements to an axis. Returns (vline, annot, dot)."""
+        vline = ax.axvline(x=0, color='#888888', linewidth=0.8,
+                           linestyle='--', alpha=0.6, visible=False)
+        annot = ax.annotate(
+            '', xy=(0, 0), xytext=(12, 12),
+            textcoords='offset points',
+            ha='left', va='bottom',
+            fontsize=8,
+            color=Colors.TEXT_PRIMARY,
+            bbox=dict(boxstyle='round,pad=0.4',
+                      facecolor=Colors.BG_DARK,
+                      edgecolor=Colors.BORDER,
+                      alpha=0.88),
+            visible=False
+        )
+        dot, = ax.plot([], [], 'o', color='#F0A500',
+                       markersize=5, zorder=5, visible=False)
+        return vline, annot, dot
+
+    def _snap_to_data(self, data, x_mouse):
+        """Find the nearest data point to x_mouse. Returns (x_snap, y_snap) or None."""
+        if data is None:
+            return None
+        wvn, spect = data
+        if wvn is None or len(wvn) == 0:
+            return None
+        idx = int(np.argmin(np.abs(wvn - x_mouse)))
+        return wvn[idx], spect[idx]
+
+    def _on_mouse_move(self, event):
+        if event.inaxes == self.ax_current:
+            vline, annot, dot = self._vline_current, self._annot_current, self._dot_current
+            data = self._data_current
+        elif event.inaxes == self.ax_compare:
+            vline, annot, dot = self._vline_compare, self._annot_compare, self._dot_compare
+            data = self._data_compare
+        else:
+            return
+        if vline is None or annot is None or event.xdata is None:
+            return
+
+        snap = self._snap_to_data(data, event.xdata)
+        if snap is not None:
+            x_snap, y_snap = snap
+            vline.set_xdata([x_snap, x_snap])
+            vline.set_visible(True)
+            annot.set_text(f'Wvn: {x_snap:.1f} cm⁻¹\nI: {y_snap:.4f}')
+            annot.xy = (x_snap, y_snap)
+            # Flip offset when near right or top edge
+            ax = event.inaxes
+            xlim, ylim = ax.get_xlim(), ax.get_ylim()
+            x_frac = (x_snap - xlim[0]) / (xlim[1] - xlim[0]) if xlim[1] != xlim[0] else 0.5
+            y_frac = (y_snap - ylim[0]) / (ylim[1] - ylim[0]) if ylim[1] != ylim[0] else 0.5
+            ox = -70 if x_frac > 0.75 else 12
+            oy = -30 if y_frac > 0.75 else 12
+            annot.xyann = (ox, oy)
+            annot.set_ha('right' if x_frac > 0.75 else 'left')
+            annot.set_va('top' if y_frac > 0.75 else 'bottom')
+            annot.set_visible(True)
+            if dot is not None:
+                dot.set_data([x_snap], [y_snap])
+                dot.set_visible(True)
+        else:
+            vline.set_xdata([event.xdata, event.xdata])
+            vline.set_visible(True)
+            annot.set_text(f'Wvn: {event.xdata:.1f}\nI: {event.ydata:.4f}')
+            annot.xy = (event.xdata, event.ydata)
+            annot.set_visible(True)
+        self.draw_idle()
+
+    def _on_axes_leave(self, event):
+        if event.inaxes == self.ax_current:
+            for artist in [self._vline_current, self._annot_current, self._dot_current]:
+                if artist is not None:
+                    artist.set_visible(False)
+        elif event.inaxes == self.ax_compare:
+            for artist in [self._vline_compare, self._annot_compare, self._dot_compare]:
+                if artist is not None:
+                    artist.set_visible(False)
+        self.draw_idle()
+
     def plot_current(self, wvn, spect, title=None):
         """Plot the current spectrum state."""
         fs_title, fs_label, _, fs_legend = self._font_sizes()
@@ -143,6 +241,11 @@ class DualPlotCanvas(FigureCanvas):
         self.ax_current.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
         self.ax_current.set_title(title or "Current Spectrum", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
         self.ax_current.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        if wvn is not None and len(wvn) == len(spect):
+            self._data_current = (np.asarray(wvn), np.asarray(spect))
+        else:
+            self._data_current = (np.arange(len(spect), dtype=float), np.asarray(spect))
+        self._vline_current, self._annot_current, self._dot_current = self._add_crosshair(self.ax_current)
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
@@ -166,6 +269,12 @@ class DualPlotCanvas(FigureCanvas):
         self.ax_compare.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
         self.ax_compare.set_title("Processing Comparison", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
         self.ax_compare.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        snap_spect = after if (after is not None and wvn is not None and len(after) == len(wvn)) else before
+        if wvn is not None and len(wvn) == len(snap_spect):
+            self._data_compare = (np.asarray(wvn), np.asarray(snap_spect))
+        else:
+            self._data_compare = (np.arange(len(snap_spect), dtype=float), np.asarray(snap_spect))
+        self._vline_compare, self._annot_compare, self._dot_compare = self._add_crosshair(self.ax_compare)
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
@@ -191,6 +300,11 @@ class DualPlotCanvas(FigureCanvas):
             wvn if wvn is not None and len(wvn) == len(spect) else range(len(spect)),
             baseline, spect, alpha=0.2, color=Colors.SUCCESS, label='Background'
         )
+        if wvn is not None and len(wvn) == len(spect):
+            self._data_compare = (np.asarray(wvn), np.asarray(spect))
+        else:
+            self._data_compare = (np.arange(len(spect), dtype=float), np.asarray(spect))
+        self._vline_compare, self._annot_compare, self._dot_compare = self._add_crosshair(self.ax_compare)
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
@@ -975,9 +1089,9 @@ class P_Mean_Process_UI(QMainWindow):
         try:
             if is_renishaw:
                 # Renishaw: Data file contains both wavenumber and intensity (2 columns)
-                data_df = rdata.load_spectrum_data(self.data_file)
-                data_arr = data_df if isinstance(data_df, np.ndarray) else data_df.to_numpy()
-                data_arr = np.asarray(data_arr, dtype=np.float64)
+                # Use read_txt_file to preserve both columns (load_spectrum_data strips wavenumber)
+                data_df = rdata.read_txt_file(self.data_file)
+                data_arr = data_df.to_numpy().astype(np.float64)
 
                 if data_arr.ndim == 2 and data_arr.shape[1] >= 2:
                     # Two-column format: [wavenumber, intensity]
