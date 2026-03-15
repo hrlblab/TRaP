@@ -494,63 +494,99 @@ class P_Mean_Process_UI(QMainWindow):
         self.lbl_step_info.setStyleSheet("font-size: 14px; font-weight: bold; color: #007bff; padding: 5px;")
         left_layout.addWidget(self.lbl_step_info)
 
-        # Parameters Group
+        # ── Processing Parameters (grouped by pipeline step) ──────────────
         params_group = QGroupBox("Processing Parameters")
-        params_layout = QFormLayout(params_group)
-        params_layout.setSpacing(8)
-        params_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        params_outer = QVBoxLayout(params_group)
+        params_outer.setSpacing(8)
 
-        self.edit_start = QLineEdit("900")
-        self.edit_start.setMinimumHeight(32)
-        self.edit_stop = QLineEdit("1700")
-        self.edit_stop.setMinimumHeight(32)
-        self.edit_polyorder = QLineEdit("7")
-        self.edit_polyorder.setMinimumHeight(32)
-        self.edit_binwidth = QLineEdit("3.5")
-        self.edit_binwidth.setMinimumHeight(32)
+        STEP_STYLE = "color: #4C8BF5; font-size: 11px; font-weight: 600; padding: 2px 0 1px 0;"
 
-        params_layout.addRow("Truncate Start (cm⁻¹):", self.edit_start)
-        params_layout.addRow("Truncate Stop (cm⁻¹):", self.edit_stop)
-        params_layout.addRow("Polyorder:", self.edit_polyorder)
-        params_layout.addRow("Bin Width:", self.edit_binwidth)
+        def make_field(default, width=80):
+            w = QLineEdit(default)
+            w.setMinimumHeight(32)
+            w.setMaximumWidth(width)
+            return w
 
-        left_layout.addWidget(params_group)
+        def add_step_header(layout, label):
+            sep = QFrame()
+            sep.setFrameShape(QFrame.HLine)
+            sep.setStyleSheet("color: #2a2a2a;")
+            layout.addWidget(sep)
+            lbl = QLabel(label)
+            lbl.setStyleSheet(STEP_STYLE)
+            layout.addWidget(lbl)
 
-        # Noise smoothing group
-        denoise_group = QGroupBox("Noise Smoothing Settings")
-        denoise_layout = QFormLayout(denoise_group)
-        denoise_layout.setSpacing(8)
-        denoise_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        def add_row(layout, label_text, widget):
+            row = QHBoxLayout()
+            lbl = QLabel(label_text)
+            lbl.setMinimumWidth(130)
+            row.addWidget(lbl)
+            row.addWidget(widget)
+            row.addStretch()
+            layout.addLayout(row)
 
+        # Truncation
+        add_step_header(params_outer, "Truncation")
+        self.edit_start = make_field("900")
+        self.edit_stop  = make_field("1700")
+        add_row(params_outer, "Start (cm⁻¹):", self.edit_start)
+        add_row(params_outer, "Stop  (cm⁻¹):", self.edit_stop)
+
+        # Binning
+        add_step_header(params_outer, "Binning")
+        self.edit_binwidth = make_field("3.5")
+        add_row(params_outer, "Bin Width (cm⁻¹):", self.edit_binwidth)
+
+        # Noise Smoothing
+        add_step_header(params_outer, "Noise Smoothing")
         self.combo_denoise = QComboBox()
         self.combo_denoise.addItems(["Savitzky-Golay", "Moving Average", "Median Filter", "None"])
         self.combo_denoise.currentTextChanged.connect(self._update_denoise_visibility)
         self.combo_denoise.setMinimumHeight(32)
-        denoise_layout.addRow("Method:", self.combo_denoise)
+        add_row(params_outer, "Method:", self.combo_denoise)
 
-        self.edit_sgorder = QLineEdit("2")
-        self.edit_sgorder.setMinimumHeight(32)
-        self.edit_sgframe = QLineEdit("7")
-        self.edit_sgframe.setMinimumHeight(32)
-        self.edit_mawindow = QLineEdit("5")
-        self.edit_mawindow.setMinimumHeight(32)
-        self.edit_mediank = QLineEdit("5")
-        self.edit_mediank.setMinimumHeight(32)
+        self.edit_sgorder  = make_field("2")
+        self.edit_sgframe  = make_field("7")
+        self.edit_mawindow = make_field("5")
+        self.edit_mediank  = make_field("5")
 
-        self.lbl_sgorder = QLabel("SG Order:")
-        self.lbl_sgframe = QLabel("SG Frame:")
-        self.lbl_mawindow = QLabel("MA Window:")
-        self.lbl_mediank = QLabel("Median Kernel:")
+        def make_row_widget(label_text, field):
+            """Wrap a label+field in a QWidget so we can hide the whole row."""
+            w = QWidget()
+            row = QHBoxLayout(w)
+            row.setContentsMargins(0, 0, 0, 0)
+            lbl = QLabel(label_text)
+            lbl.setMinimumWidth(130)
+            row.addWidget(lbl)
+            row.addWidget(field)
+            row.addStretch()
+            return w
 
-        denoise_layout.addRow(self.lbl_sgorder, self.edit_sgorder)
-        denoise_layout.addRow(self.lbl_sgframe, self.edit_sgframe)
-        denoise_layout.addRow(self.lbl_mawindow, self.edit_mawindow)
-        denoise_layout.addRow(self.lbl_mediank, self.edit_mediank)
+        self.row_sgorder  = make_row_widget("SG Poly Order:", self.edit_sgorder)
+        self.row_sgframe  = make_row_widget("SG Window Size:", self.edit_sgframe)
+        self.row_mawindow = make_row_widget("MA Window:", self.edit_mawindow)
+        self.row_mediank  = make_row_widget("Median Kernel:", self.edit_mediank)
 
-        left_layout.addWidget(denoise_group)
+        for row_w in [self.row_sgorder, self.row_sgframe, self.row_mawindow, self.row_mediank]:
+            params_outer.addWidget(row_w)
+
+        # Fluorescence BG Subtraction
+        add_step_header(params_outer, "Fluorescence BG Subtraction")
+        self.edit_polyorder = make_field("7")
+        self.edit_fbs_maxiter = make_field("50")
+        add_row(params_outer, "Poly Order:", self.edit_polyorder)
+        add_row(params_outer, "Max Iterations:", self.edit_fbs_maxiter)
+
+        # Normalization
+        add_step_header(params_outer, "Normalization")
+        self.combo_norm = QComboBox()
+        self.combo_norm.addItems(["Mean", "Max", "Area"])
+        self.combo_norm.setMinimumHeight(32)
+        add_row(params_outer, "Method:", self.combo_norm)
+
         self._update_denoise_visibility()
 
-        # Config Group
+        # Config Group (build here, added to layout after files+params)
         config_group = QGroupBox("Configuration")
         config_layout = QHBoxLayout(config_group)
         config_layout.setSpacing(8)
@@ -562,7 +598,6 @@ class P_Mean_Process_UI(QMainWindow):
         btn_load_config.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         config_layout.addWidget(btn_save_config)
         config_layout.addWidget(btn_load_config)
-        left_layout.addWidget(config_group)
 
         # Input Files Group
         files_group = QGroupBox("Input Files")
@@ -628,19 +663,21 @@ class P_Mean_Process_UI(QMainWindow):
         cal_layout.addWidget(self.lbl_cal_file, 1)
         files_layout.addWidget(self.cal_widget)
 
+        # Load button lives inside Input Files
+        self.btn_load = QPushButton("Load && Process Data")
+        self.btn_load.setProperty("class", "success")
+        self.btn_load.clicked.connect(self.on_load_rdata_files)
+        self.btn_load.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        files_layout.addWidget(self.btn_load)
+
+        # Input Files goes first
         left_layout.addWidget(files_group)
+        left_layout.addWidget(params_group)
 
         # Navigation Group
         nav_group = QGroupBox("Navigation")
         nav_layout = QVBoxLayout(nav_group)
         nav_layout.setSpacing(8)
-
-        # Load data button
-        self.btn_load = QPushButton("Load && Process Data")
-        self.btn_load.setProperty("class", "success")
-        self.btn_load.clicked.connect(self.on_load_rdata_files)
-        self.btn_load.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        nav_layout.addWidget(self.btn_load)
 
         # Step navigation
         step_nav = QHBoxLayout()
@@ -677,6 +714,7 @@ class P_Mean_Process_UI(QMainWindow):
         self.btn_batch.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         nav_layout.addWidget(self.btn_batch)
 
+        left_layout.addWidget(config_group)
         left_layout.addWidget(nav_group)
 
         # History Group
@@ -718,21 +756,16 @@ class P_Mean_Process_UI(QMainWindow):
         main_layout.addWidget(splitter)
 
     def _update_denoise_visibility(self):
-        """Show/hide denoise parameters based on method."""
+        """Show/hide denoise parameters based on selected method."""
         method = self.combo_denoise.currentText()
-
-        is_sg = method == "Savitzky-Golay"
-        is_ma = method == "Moving Average"
+        is_sg  = method == "Savitzky-Golay"
+        is_ma  = method == "Moving Average"
         is_med = method == "Median Filter"
 
-        self.lbl_sgorder.setVisible(is_sg)
-        self.edit_sgorder.setVisible(is_sg)
-        self.lbl_sgframe.setVisible(is_sg)
-        self.edit_sgframe.setVisible(is_sg)
-        self.lbl_mawindow.setVisible(is_ma)
-        self.edit_mawindow.setVisible(is_ma)
-        self.lbl_mediank.setVisible(is_med)
-        self.edit_mediank.setVisible(is_med)
+        self.row_sgorder.setVisible(is_sg)
+        self.row_sgframe.setVisible(is_sg)
+        self.row_mawindow.setVisible(is_ma)
+        self.row_mediank.setVisible(is_med)
 
     def _update_ui_state(self):
         """Update UI based on current state."""
@@ -804,6 +837,8 @@ class P_Mean_Process_UI(QMainWindow):
             config["Start"] = float(self.edit_start.text())
             config["Stop"] = float(self.edit_stop.text())
             config["Polyorder"] = int(self.edit_polyorder.text())
+            config["FBSMaxIter"] = int(self.edit_fbs_maxiter.text())
+            config["NormalizeMethod"] = self.combo_norm.currentText()
             config["DenoiseMethod"] = self.combo_denoise.currentText()
             config["BinWidth"] = float(self.edit_binwidth.text())
             config["SGorder"] = int(self.edit_sgorder.text())
@@ -833,19 +868,83 @@ class P_Mean_Process_UI(QMainWindow):
         if filepath:
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
-                    config = json.load(f)
-                self.edit_start.setText(str(config.get("Start", 900)))
-                self.edit_stop.setText(str(config.get("Stop", 1700)))
-                self.edit_polyorder.setText(str(config.get("Polyorder", 7)))
-                self.combo_denoise.setCurrentText(config.get("DenoiseMethod", "Savitzky-Golay"))
-                self.edit_binwidth.setText(str(config.get("BinWidth", 3.5)))
-                self.edit_sgorder.setText(str(config.get("SGorder", 2)))
-                self.edit_sgframe.setText(str(config.get("SGframe", 7)))
-                self.edit_mawindow.setText(str(config.get("MAWindow", 5)))
-                self.edit_mediank.setText(str(config.get("MedianKernel", 5)))
+                    raw = f.read()
+                try:
+                    config = json.loads(raw)
+                except json.JSONDecodeError as e:
+                    QMessageBox.critical(self, "Invalid JSON", f"Config file is not valid JSON:\n{e}")
+                    return
+                if not isinstance(config, dict):
+                    QMessageBox.critical(self, "Invalid Config", "Config file must be a JSON object.")
+                    return
+
+                # Field-level validation
+                VALID_DENOISE   = {"Savitzky-Golay", "Moving Average", "Median Filter", "None"}
+                VALID_NORMALIZE = {"Mean", "Max", "Area"}
+                warnings = []
+                def checked_float(key, default, min_val=None):
+                    try:
+                        v = float(config.get(key, default))
+                        if min_val is not None and v <= min_val:
+                            warnings.append(f"{key} must be > {min_val} (got {v}), using default {default}")
+                            return default
+                        return v
+                    except (TypeError, ValueError):
+                        warnings.append(f"{key} is not a valid number (got {config.get(key)!r}), using default {default}")
+                        return default
+                def checked_int(key, default, min_val=None):
+                    try:
+                        v = int(config.get(key, default))
+                        if min_val is not None and v < min_val:
+                            warnings.append(f"{key} must be >= {min_val} (got {v}), using default {default}")
+                            return default
+                        return v
+                    except (TypeError, ValueError):
+                        warnings.append(f"{key} is not a valid integer (got {config.get(key)!r}), using default {default}")
+                        return default
+
+                start    = checked_float("Start",    900,  0)
+                stop     = checked_float("Stop",     1700, 0)
+                if stop <= start:
+                    warnings.append(f"Stop ({stop}) must be > Start ({start}), using defaults")
+                    start, stop = 900, 1700
+                binwidth = checked_float("BinWidth",  3.5,  0)
+                poly     = checked_int("Polyorder",   7,    1)
+                maxiter  = checked_int("FBSMaxIter",  50,   1)
+                sgorder  = checked_int("SGorder",     2,    1)
+                sgframe  = checked_int("SGframe",     7,    3)
+                if sgframe % 2 == 0:
+                    warnings.append(f"SGframe must be odd (got {sgframe}), incrementing to {sgframe+1}")
+                    sgframe += 1
+                mawin    = checked_int("MAWindow",    5,    1)
+                medk     = checked_int("MedianKernel",5,    1)
+                dn       = config.get("DenoiseMethod", "Savitzky-Golay")
+                if dn not in VALID_DENOISE:
+                    warnings.append(f"DenoiseMethod {dn!r} not recognised, using 'Savitzky-Golay'")
+                    dn = "Savitzky-Golay"
+                nm       = config.get("NormalizeMethod", "Mean")
+                if nm not in VALID_NORMALIZE:
+                    warnings.append(f"NormalizeMethod {nm!r} not recognised, using 'Mean'")
+                    nm = "Mean"
+
+                if warnings:
+                    QMessageBox.warning(self, "Config Warnings",
+                                        "Loaded with issues:\n• " + "\n• ".join(warnings))
+
+                self.edit_start.setText(str(start))
+                self.edit_stop.setText(str(stop))
+                self.edit_binwidth.setText(str(binwidth))
+                self.edit_polyorder.setText(str(poly))
+                self.edit_fbs_maxiter.setText(str(maxiter))
+                self.combo_norm.setCurrentText(nm)
+                self.combo_denoise.setCurrentText(dn)
+                self.edit_sgorder.setText(str(sgorder))
+                self.edit_sgframe.setText(str(sgframe))
+                self.edit_mawindow.setText(str(mawin))
+                self.edit_mediank.setText(str(medk))
                 self.lbl_status.setText(f"Config loaded: {filepath}")
             except Exception as e:
-                QMessageBox.warning(self, "Error", f"Failed to load: {e}")
+                QMessageBox.critical(self, "Error", f"Failed to load config:\n{e}")
 
     def on_previous_step(self):
         """Go back to previous processing step."""
@@ -932,7 +1031,8 @@ class P_Mean_Process_UI(QMainWindow):
 
             elif step == "Polyfit Preview":
                 polyorder = int(self.edit_polyorder.text())
-                base, _ = FluorescenceBackgroundSubtraction(self.current_spect.flatten(), polyorder)
+                fbs_maxiter = int(self.edit_fbs_maxiter.text())
+                base, _ = FluorescenceBackgroundSubtraction(self.current_spect.flatten(), polyorder, max_iter=fbs_maxiter)
                 # Show polyfit preview without modifying data
                 wvn = self.current_wvn.flatten() if self.current_wvn is not None else None
                 self.canvas.plot_polyfit(wvn, self.current_spect.flatten(), base)
@@ -945,11 +1045,12 @@ class P_Mean_Process_UI(QMainWindow):
 
             elif step == "FluorescenceBackgroundSubtraction":
                 polyorder = int(self.edit_polyorder.text())
+                fbs_maxiter = int(self.edit_fbs_maxiter.text())
                 base, finalSpect = FluorescenceBackgroundSubtraction(
-                    self.current_spect.flatten(), polyorder
+                    self.current_spect.flatten(), polyorder, max_iter=fbs_maxiter
                 )
                 self.current_spect = finalSpect
-                self.operations.append(f"FBS(order={polyorder})")
+                self.operations.append(f"FBS(order={polyorder},iter={fbs_maxiter})")
 
             elif step == "Noise Smoothing":
                 method = self.combo_denoise.currentText()
@@ -973,8 +1074,9 @@ class P_Mean_Process_UI(QMainWindow):
                     self.operations.append("NoiseSmoothing(None)")
 
             elif step == "Normalization":
-                self.current_spect = Normalize(self.current_spect)
-                self.operations.append("Normalization")
+                norm_method = self.combo_norm.currentText().lower()
+                self.current_spect = Normalize(self.current_spect, method=norm_method)
+                self.operations.append(f"Normalization({norm_method})")
 
             else:
                 QMessageBox.warning(self, "Error", f"Unknown step: {step}")

@@ -216,6 +216,20 @@ class ConfigManagerUI(QDialog):
     PROBE_OPTIONS = ["Microscope", "Handheld", "Lensed", "SORS", "Classic"]
     RANGE_OPTIONS = ["Fingerprint", "High WVN", "Full Range", "Custom"]
 
+    # Hardware-fixed CCD dimensions per detector (X=spectral pixels, Y=spatial pixels)
+    DETECTOR_SPECS = {
+        "256br":    {"CCD X": 1024, "CCD Y": 256},
+        "400br":    {"CCD X": 2048, "CCD Y": 400},
+        "Blaze":    {"CCD X": 1340, "CCD Y": 400},
+        "Kaiser":   {"CCD X": 1024, "CCD Y": 256},
+    }
+    # Systems where detector combo is hidden — fix CCD X from system directly
+    SYSTEM_CCD_X = {
+        "Renishaw": 1023,
+        "Portable": None,   # unknown, leave editable
+        "MANTIS":   None,
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.config = ConfigManager()
@@ -520,6 +534,7 @@ class ConfigManagerUI(QDialog):
         self.labels["Detector"] = QLabel("Detector:")
         system_layout.addWidget(self.labels["Detector"], 2, 0)
         self.inputs["Detector"] = QComboBox()
+        self.inputs["Detector"].currentIndexChanged.connect(self._on_detector_changed)
         system_layout.addWidget(self.inputs["Detector"], 2, 1)
 
         # Probe
@@ -542,15 +557,17 @@ class ConfigManagerUI(QDialog):
         measure_layout.addWidget(self.inputs["Raman Shift Range"], 0, 1)
 
         # CCD X
-        measure_layout.addWidget(QLabel("CCD X Position:"), 1, 0)
+        self.labels["CCD X"] = QLabel("CCD X (spectral pixels):")
+        measure_layout.addWidget(self.labels["CCD X"], 1, 0)
         self.inputs["CCD X"] = QLineEdit()
-        self.inputs["CCD X"].setPlaceholderText("0.0")
+        self.inputs["CCD X"].setPlaceholderText("auto")
         measure_layout.addWidget(self.inputs["CCD X"], 1, 1)
 
         # CCD Y
-        measure_layout.addWidget(QLabel("CCD Y Position:"), 2, 0)
+        self.labels["CCD Y"] = QLabel("CCD Y (spatial pixels):")
+        measure_layout.addWidget(self.labels["CCD Y"], 2, 0)
         self.inputs["CCD Y"] = QLineEdit()
-        self.inputs["CCD Y"].setPlaceholderText("0.0")
+        self.inputs["CCD Y"].setPlaceholderText("auto")
         measure_layout.addWidget(self.inputs["CCD Y"], 2, 1)
 
         form_layout.addWidget(measure_group)
@@ -740,6 +757,24 @@ class ConfigManagerUI(QDialog):
         else:
             self.inputs["Detector"].setVisible(False)
             self.labels["Detector"].setVisible(False)
+            # For systems without a detector combo, set CCD X from system table
+            fixed_x = self.SYSTEM_CCD_X.get(system)
+            self._apply_ccd_spec(fixed_x, None)
+
+    def _on_detector_changed(self):
+        """Auto-fill CCD X/Y when a known detector is selected."""
+        det = self.inputs["Detector"].currentText()
+        spec = self.DETECTOR_SPECS.get(det)
+        if spec:
+            self._apply_ccd_spec(spec["CCD X"], spec["CCD Y"])
+        # If detector not in table, leave fields editable as-is
+
+    def _apply_ccd_spec(self, ccd_x, ccd_y):
+        """Pre-fill CCD X/Y fields from detector spec. Values remain editable."""
+        if ccd_x is not None:
+            self.inputs["CCD X"].setText(str(ccd_x))
+        if ccd_y is not None:
+            self.inputs["CCD Y"].setText(str(ccd_y))
 
     def _update_status(self):
         """Update status label."""

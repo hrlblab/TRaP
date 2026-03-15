@@ -32,11 +32,14 @@ from utils.io import wdata, rdata
 from utils.SpectralPreprocess import (
     Binning, Denoise, Truncate, CosmicRayRemoval,
     SpectralResponseCorrection, subtractBaseline,
-    FluorescenceBackgroundSubtraction
+    FluorescenceBackgroundSubtraction, Normalize
 )
 from UI_utils.UI_Config_Manager_v2 import ConfigManager
 from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
 
+
+VALID_DENOISE   = {"Savitzky-Golay", "Moving Average", "Median Filter", "None"}
+VALID_NORMALIZE = {"Mean", "Max", "Area"}
 
 def default_config() -> dict:
     """Return default configuration."""
@@ -44,6 +47,8 @@ def default_config() -> dict:
         "Start": 900,
         "Stop": 1700,
         "Polyorder": 7,
+        "FBSMaxIter": 50,
+        "NormalizeMethod": "Mean",
         "DenoiseMethod": "Savitzky-Golay",
         "BinWidth": 3.5,
         "SGorder": 2,
@@ -53,18 +58,94 @@ def default_config() -> dict:
     }
 
 
-def load_config_file(config_file: str) -> dict:
-    """Load config JSON with defaults fallback."""
+def validate_config(cfg: dict) -> list:
+    """Check config fields for type/range validity. Returns list of error strings."""
+    errors = []
+    defaults = default_config()
+
+    def check_positive_float(key):
+        try:
+            v = float(cfg.get(key, defaults[key]))
+            if v <= 0:
+                errors.append(f"{key} must be > 0 (got {v})")
+        except (TypeError, ValueError):
+            errors.append(f"{key} must be a number (got {cfg.get(key)!r})")
+
+    def check_positive_int(key):
+        try:
+            v = int(cfg.get(key, defaults[key]))
+            if v <= 0:
+                errors.append(f"{key} must be a positive integer (got {v})")
+        except (TypeError, ValueError):
+            errors.append(f"{key} must be an integer (got {cfg.get(key)!r})")
+
+    check_positive_float("Start")
+    check_positive_float("Stop")
+    check_positive_float("BinWidth")
+    check_positive_int("Polyorder")
+    check_positive_int("FBSMaxIter")
+    check_positive_int("SGorder")
+    check_positive_int("SGframe")
+    check_positive_int("MAWindow")
+    check_positive_int("MedianKernel")
+
+    try:
+        start, stop = float(cfg.get("Start", 900)), float(cfg.get("Stop", 1700))
+        if stop <= start:
+            errors.append(f"Stop ({stop}) must be > Start ({start})")
+    except (TypeError, ValueError):
+        pass
+
+    dn = cfg.get("DenoiseMethod", "Savitzky-Golay")
+    if dn not in VALID_DENOISE:
+        errors.append(f"DenoiseMethod {dn!r} not recognised. Valid: {VALID_DENOISE}")
+
+    nm = cfg.get("NormalizeMethod", "Mean")
+    if nm not in VALID_NORMALIZE:
+        errors.append(f"NormalizeMethod {nm!r} not recognised. Valid: {VALID_NORMALIZE}")
+
+    sg_frame = cfg.get("SGframe", 7)
+    sg_order = cfg.get("SGorder", 2)
+    try:
+        if int(sg_frame) % 2 == 0:
+            errors.append(f"SGframe must be odd (got {sg_frame})")
+        if int(sg_frame) <= int(sg_order):
+            errors.append(f"SGframe ({sg_frame}) must be > SGorder ({sg_order})")
+    except (TypeError, ValueError):
+        pass
+
+    return errors
+
+
+def load_config_file(config_file: str) -> tuple:
+    """Load config JSON with defaults fallback.
+
+    Returns:
+        (cfg dict, list of warning strings)
+    """
     cfg = default_config()
+    warnings = []
     if config_file and os.path.exists(config_file):
         try:
             with open(config_file, "r", encoding="utf-8") as f:
                 on_disk = json.load(f)
-            for k, v in default_config().items():
-                cfg[k] = on_disk.get(k, v)
+            if not isinstance(on_disk, dict):
+                warnings.append("Config file does not contain a JSON object — using defaults.")
+            else:
+                defaults = default_config()
+                unknown = [k for k in on_disk if k not in defaults]
+                if unknown:
+                    warnings.append(f"Unknown fields ignored: {unknown}")
+                for k, default_val in defaults.items():
+                    cfg[k] = on_disk.get(k, default_val)
+                errors = validate_config(cfg)
+                if errors:
+                    warnings.extend(errors)
+        except json.JSONDecodeError as e:
+            warnings.append(f"Invalid JSON: {e} — using defaults.")
         except Exception as e:
-            print(f"[WARN] Failed to load config: {e}")
-    return cfg
+            warnings.append(f"Failed to load config: {e} — using defaults.")
+    return cfg, warnings
 
 
 def save_config_file(config: dict, config_file: str):
@@ -102,7 +183,8 @@ def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, confi
 
     # 4) Fluorescence background subtraction
     polyorder = int(config.get("Polyorder", 7))
-    _, fbs_spect = FluorescenceBackgroundSubtraction(binned_spect, polyorder)
+    fbs_maxiter = int(config.get("FBSMaxIter", 50))
+    _, fbs_spect = FluorescenceBackgroundSubtraction(binned_spect, polyorder, max_iter=fbs_maxiter)
 
     # 5) Noise smoothing
     method = str(config.get("DenoiseMethod", "Savitzky-Golay"))
@@ -122,6 +204,10 @@ def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, confi
         finalSpect = medfilt(fbs_spect, kernel_size=MedianKernel)
     else:
         finalSpect = fbs_spect
+
+    # 6) Normalization
+    norm_method = str(config.get("NormalizeMethod", "Mean")).lower()
+    finalSpect = Normalize(finalSpect, method=norm_method)
 
     return new_wvn, finalSpect
 
@@ -325,7 +411,7 @@ class BatchPMeanUI(QMainWindow):
         self.wvn_file = None
         self.output_root = None
         self.config_path = "p_mean_config.json"
-        self.config = load_config_file(self.config_path)
+        self.config, _ = load_config_file(self.config_path)
         self.config_modified = False
         self.worker = None
 
@@ -366,20 +452,28 @@ class BatchPMeanUI(QMainWindow):
         self.edit_start.setMinimumHeight(32)
         self.edit_stop = QLineEdit(str(self.config["Stop"]))
         self.edit_stop.setMinimumHeight(32)
-        self.edit_poly = QLineEdit(str(self.config["Polyorder"]))
-        self.edit_poly.setMinimumHeight(32)
         self.edit_binw = QLineEdit(str(self.config["BinWidth"]))
         self.edit_binw.setMinimumHeight(32)
+        self.edit_poly = QLineEdit(str(self.config["Polyorder"]))
+        self.edit_poly.setMinimumHeight(32)
+        self.edit_fbs_maxiter = QLineEdit(str(self.config["FBSMaxIter"]))
+        self.edit_fbs_maxiter.setMinimumHeight(32)
+        self.combo_norm = QComboBox()
+        self.combo_norm.addItems(["Mean", "Max", "Area"])
+        self.combo_norm.setCurrentText(self.config.get("NormalizeMethod", "Mean"))
+        self.combo_norm.setMinimumHeight(32)
 
-        self.edit_start.textChanged.connect(self._mark_config_modified)
-        self.edit_stop.textChanged.connect(self._mark_config_modified)
-        self.edit_poly.textChanged.connect(self._mark_config_modified)
-        self.edit_binw.textChanged.connect(self._mark_config_modified)
+        for w in [self.edit_start, self.edit_stop,
+                  self.edit_binw, self.edit_poly, self.edit_fbs_maxiter]:
+            w.textChanged.connect(self._mark_config_modified)
+        self.combo_norm.currentIndexChanged.connect(self._mark_config_modified)
 
         params_form.addRow("Start (cm⁻¹):", self.edit_start)
         params_form.addRow("Stop (cm⁻¹):", self.edit_stop)
-        params_form.addRow("Polyorder:", self.edit_poly)
         params_form.addRow("BinWidth:", self.edit_binw)
+        params_form.addRow("Polyorder:", self.edit_poly)
+        params_form.addRow("FBS Max Iterations:", self.edit_fbs_maxiter)
+        params_form.addRow("Normalize Method:", self.combo_norm)
 
         # Noise smoothing settings
         self.combo_denoise = QComboBox()
@@ -639,9 +733,11 @@ class BatchPMeanUI(QMainWindow):
         cfg = {
             "Start": float(self.edit_start.text()),
             "Stop": float(self.edit_stop.text()),
-            "Polyorder": int(self.edit_poly.text()),
-            "DenoiseMethod": self.combo_denoise.currentText(),
             "BinWidth": float(self.edit_binw.text()),
+            "Polyorder": int(self.edit_poly.text()),
+            "FBSMaxIter": int(self.edit_fbs_maxiter.text()),
+            "NormalizeMethod": self.combo_norm.currentText(),
+            "DenoiseMethod": self.combo_denoise.currentText(),
             "SGorder": int(self.edit_sgorder.text()),
             "SGframe": int(self.edit_sgframe.text()),
             "MAWindow": int(self.edit_mawin.text()),
@@ -662,9 +758,11 @@ class BatchPMeanUI(QMainWindow):
         """Apply config to UI."""
         self.edit_start.setText(str(cfg.get("Start", 900)))
         self.edit_stop.setText(str(cfg.get("Stop", 1700)))
-        self.edit_poly.setText(str(cfg.get("Polyorder", 7)))
-        self.combo_denoise.setCurrentText(cfg.get("DenoiseMethod", "Savitzky-Golay"))
         self.edit_binw.setText(str(cfg.get("BinWidth", 3.5)))
+        self.edit_poly.setText(str(cfg.get("Polyorder", 7)))
+        self.edit_fbs_maxiter.setText(str(cfg.get("FBSMaxIter", 50)))
+        self.combo_norm.setCurrentText(cfg.get("NormalizeMethod", "Mean"))
+        self.combo_denoise.setCurrentText(cfg.get("DenoiseMethod", "Savitzky-Golay"))
         self.edit_sgorder.setText(str(cfg.get("SGorder", 2)))
         self.edit_sgframe.setText(str(cfg.get("SGframe", 7)))
         self.edit_mawin.setText(str(cfg.get("MAWindow", 5)))
@@ -717,7 +815,12 @@ class BatchPMeanUI(QMainWindow):
     def on_load_config(self):
         path, _ = QFileDialog.getOpenFileName(self, "Load Config", "", "JSON Files (*.json)")
         if path:
-            self.config = load_config_file(path)
+            cfg, warnings = load_config_file(path)
+            if warnings:
+                self._log("Config warnings:", "warning")
+                for w in warnings:
+                    self._log(f"  • {w}", "warning")
+            self.config = cfg
             self._apply_config(self.config)
             self.config_path = path
             self._log(f"Config loaded: {path}", "info")

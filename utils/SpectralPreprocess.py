@@ -60,14 +60,20 @@ def Denoise(binSpect, SGorder=2, SGframe=7):
     spect = savgol_filter(binSpect.astype(np.float64), SGframe, SGorder)
     return spect.astype(np.float64)
 
-def FluorescenceBackgroundSubtraction(spect, polyorder):
-    base = baselinePolynomialFit(spect.astype(np.float64), polyorder)
+def FluorescenceBackgroundSubtraction(spect, polyorder, max_iter=50):
+    base = baselinePolynomialFit(spect.astype(np.float64), polyorder, max_iter=max_iter)
     finalSpect = spect.astype(np.float64) - base
     return base.astype(np.float64), finalSpect.astype(np.float64)
 
-def Normalize(finalSpect):
-    finalSpect = finalSpect.astype(np.float64) / np.mean(finalSpect).astype(np.float64)
-    return finalSpect
+def Normalize(finalSpect, method='mean'):
+    s = finalSpect.astype(np.float64)
+    if method == 'max':
+        denom = np.max(np.abs(s))
+    elif method == 'area':
+        denom = np.trapz(np.abs(s))
+    else:  # mean
+        denom = np.mean(s)
+    return s / denom if denom != 0 else s
 
 
 def FinalSpectra(newwvn, spect, base, finalSpect):
@@ -107,7 +113,7 @@ def manual_polyval(coeffs, x):
     return result
 
 
-def baselinePolynomialFit(y, degree):
+def baselinePolynomialFit(y, degree, max_iter=50):
     x = np.arange(len(y))
     data = y.copy().astype(np.float64)  # Ensure double precision
     oldL = np.float64(1_000_000)
@@ -115,7 +121,7 @@ def baselinePolynomialFit(y, degree):
     xn = [np.float64(1_000_000)]
     samevalue = 0
     count = 1
-    while newL > 1 and newL <= oldL and samevalue < 50:
+    while newL > 1 and newL <= oldL and samevalue < max_iter:
         oldL = newL
         _, _, fitdata = curfit3(data, degree)
         tempdata = np.minimum(fitdata, data)
