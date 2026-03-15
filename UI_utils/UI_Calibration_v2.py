@@ -481,7 +481,8 @@ class CalibrationUI(QDialog):
         title.setFont(QFont("Segoe UI", Fonts.SIZE_XXL, QFont.Bold))
         title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; padding: 10px;")
         title.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title)
+        title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        main_layout.addWidget(title, 0)
 
         # Main content splitter
         splitter = QSplitter(Qt.Horizontal)
@@ -678,7 +679,7 @@ class CalibrationUI(QDialog):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([350, 700])
 
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(splitter, 1)
 
         # Status bar
         self.status_bar = QStatusBar()

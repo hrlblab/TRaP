@@ -111,7 +111,8 @@ class SRCF_UI(QDialog):
         title.setFont(QFont("Segoe UI", Fonts.SIZE_XL, QFont.Bold))
         title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; padding: 6px;")
         title.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title)
+        title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        main_layout.addWidget(title, 0)
 
         # Create splitter for left panel and right chart
         splitter = QSplitter(Qt.Horizontal)
@@ -399,7 +400,7 @@ class SRCF_UI(QDialog):
         splitter.setStretchFactor(1, 2)  # Right panel stretch factor (larger)
         splitter.setSizes([350, 650])
 
-        main_layout.addWidget(splitter)
+        main_layout.addWidget(splitter, 1)
 
         # Status bar
         self.status_bar = QStatusBar()
