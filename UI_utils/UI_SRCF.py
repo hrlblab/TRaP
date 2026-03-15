@@ -763,7 +763,7 @@ class SRCF_UI(QDialog):
             return
 
         if self.wvn is not None and len(self.wvn) == len(self.corr):
-            wavelength = 1e7 / self.wvn
+            wavelength = 1e7 / (1e7 / self.laser_wavelength - self.wvn)
             self.ax_corr.plot(wavelength, self.corr, 'b-', linewidth=1.5)
             self.ax_corr.set_xlabel("Wavelength (nm)", fontsize=fs_label)
         else:

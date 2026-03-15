@@ -81,6 +81,16 @@ def build_with_pyinstaller():
         "--exclude-module", "numpy.tests",
         "--exclude-module", "PySide6",
         "--exclude-module", "PySide2",
+        # Exclude torch and related (not used by TRaP, but present in dev env)
+        "--exclude-module", "torch",
+        "--exclude-module", "torchvision",
+        "--exclude-module", "torchaudio",
+        "--exclude-module", "torch._C",
+        "--exclude-module", "torch.distributed",
+        "--exclude-module", "triton",
+        "--exclude-module", "tensorflow",
+        "--exclude-module", "cv2",
+        "--exclude-module", "sklearn",
         # Main script
         "TRaP_GUI.py"
     ]

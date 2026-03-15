@@ -246,6 +246,8 @@ class DualPlotCanvas(FigureCanvas):
         else:
             self._data_current = (np.arange(len(spect), dtype=float), np.asarray(spect))
         self._vline_current, self._annot_current, self._dot_current = self._add_crosshair(self.ax_current)
+        x = self._data_current[0]
+        self.ax_current.set_xlim(x[0], x[-1])
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
@@ -275,6 +277,8 @@ class DualPlotCanvas(FigureCanvas):
         else:
             self._data_compare = (np.arange(len(snap_spect), dtype=float), np.asarray(snap_spect))
         self._vline_compare, self._annot_compare, self._dot_compare = self._add_crosshair(self.ax_compare)
+        x = self._data_compare[0]
+        self.ax_compare.set_xlim(x[0], x[-1])
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
@@ -305,6 +309,8 @@ class DualPlotCanvas(FigureCanvas):
         else:
             self._data_compare = (np.arange(len(spect), dtype=float), np.asarray(spect))
         self._vline_compare, self._annot_compare, self._dot_compare = self._add_crosshair(self.ax_compare)
+        x = self._data_compare[0]
+        self.ax_compare.set_xlim(x[0], x[-1])
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
