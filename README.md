@@ -9,10 +9,13 @@ Developed at **Vanderbilt Biophotonics Center**.
 - **5-step wizard workflow** guiding users through the complete processing pipeline
 - **X-axis calibration** using Neon-Argon and Acetaminophen reference spectra
 - **Spectral response correction** via White-Light, NIST SRM, or pre-computed factors
-- **Full preprocessing pipeline**: baseline subtraction, cosmic ray removal, binning, fluorescence background subtraction, noise smoothing (Savitzky-Golay / Moving Average / Median), and normalization
-- **Batch processing** for multiple spectrum files
-- **Configuration management** with save/load support
-- **Real-time visualization** with before/after comparison
+- **Full preprocessing pipeline**: baseline subtraction, SRC, truncation, binning, noise smoothing (SG / MA / Median), fluorescence background subtraction, and normalization
+- **Configurable pipeline parameters**: truncation range, bin width, FBS polynomial order and max iterations, normalization method (Mean / Max / Area), and smoothing settings
+- **Detector auto-fill**: selecting a detector model pre-fills CCD spectral and spatial pixel dimensions
+- **Spectrum Batch Processing** for multiple spectrum files with shared configuration
+- **Configuration persistence**: save/load JSON config files with field validation
+- **Interactive cursor** on processing plots: snaps to nearest data point and displays wavenumber and intensity
+- **Real-time visualization** with before/after dual-panel comparison
 - **Modern dark-themed UI** with smooth animations
 
 ## Quick Start
@@ -40,9 +43,9 @@ Step 1: X-Axis Calibration
 Step 2: Spectral Response Correction
        White-Light / NIST SRM / existing factor  -->  correction factor
                     |
-Step 3: Single Spectrum Processing    \
+Step 3: Spectrum Processing           \
        or                              }--> processed spectra (.txt)
-Step 4: Batch Processing              /
+Step 4: Spectrum Batch Processing     /
 ```
 
 ### Processing Pipeline (Steps 3 & 4)
@@ -51,12 +54,12 @@ Step 4: Batch Processing              /
 |-------|-----------|-------------|
 | 1 | Baseline Subtraction | Remove minimum intensity offset |
 | 2 | Spectral Response Correction | Apply correction factor from Step 2 |
-| 3 | Cosmic Ray Removal | Detect and remove spike noise |
-| 4 | Truncation | Extract wavenumber range (default: 900-1700 cm-1) |
-| 5 | Binning | Rebin to uniform spacing (default: 3.5 cm-1) |
-| 6 | Fluorescence Background | Polynomial baseline subtraction |
-| 7 | Noise Smoothing | Savitzky-Golay / Moving Average / Median filter |
-| 8 | Normalization | Scale to mean intensity |
+| 3 | Cosmic Ray Removal | Reserved placeholder for future integration |
+| 4 | Truncation | Extract wavenumber range of interest |
+| 5 | Binning | Rebin to uniform wavenumber spacing |
+| 6 | Noise Smoothing | Savitzky-Golay / Moving Average / Median filter |
+| 7 | Fluorescence Background | Iterative polynomial baseline subtraction |
+| 8 | Normalization | Scale spectrum by mean / max / area |
 
 ## Supported File Formats
 
