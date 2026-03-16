@@ -821,10 +821,20 @@ class SystemSelectWizard(QWidget):
         """Called after config is saved in Config Manager."""
         self.step_completed[0] = True
 
-        # Determine next step based on skip flags
+        # Renishaw provides its own calibrated wavenumber axis and needs no
+        # external WL correction — auto-check both skip flags.
+        # For any other system, reset both to unchecked so the user decides.
+        is_renishaw = self.config.params.get("System") == "Renishaw"
+        self.chk_has_cal.setChecked(is_renishaw)
+        self.chk_has_resp.setChecked(is_renishaw)
+
+        # Determine next step based on skip flags (updated by setChecked above)
         if self.has_calibration_file and self.has_response_correction:
             self.step = 3
-            msg = "Configuration saved. Calibration and Response Correction ready.\n" \
+            msg = "Configuration saved. Renishaw system detected — calibration and " \
+                  "spectral response correction steps are not required.\n" \
+                  "Proceeding to Spectrum Process." if is_renishaw else \
+                  "Configuration saved. Calibration and Response Correction ready.\n" \
                   "Proceeding to Spectrum Process."
         elif self.has_calibration_file:
             self.step = 2
