@@ -19,8 +19,6 @@ Workflow Steps:
   4. Batch Process - Batch processing of multiple spectra
 """
 
-import os
-
 from PyQt5.QtCore import Qt, QEasingCurve, QPropertyAnimation, QRect, QParallelAnimationGroup, QSequentialAnimationGroup, QTimer
 from PyQt5.QtGui import QPixmap, QFont, QIcon, QColor
 from PyQt5.QtWidgets import (
@@ -152,18 +150,22 @@ class ModernShell(QWidget):
         left.setContentsMargins(4, 4, 4, 4)
         left.setSpacing(8)
 
-        # TRaP logo (horizontal banner, fills nav rail width)
-        _logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'TRaP_logo.png')
+        # Logo
         logo = QLabel()
-        pix = QPixmap(_logo_path)
+        pix = QPixmap('vanderbilt_biophotonics_center_logo.jpg')
         if not pix.isNull():
-            logo.setPixmap(pix.scaled(200, 72, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            logo.setPixmap(pix.scaled(56, 56, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         logo.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        logo.setContentsMargins(0, 4, 0, 4)
         left.addWidget(logo)
 
+        # Title
+        title = QLabel("Raman Processing")
+        title.setObjectName("Title")
+        title.setWordWrap(True)
+        left.addWidget(title)
+
         # Subtitle
-        subtitle = QLabel("Raman spectral Processing")
+        subtitle = QLabel("Step-by-step workflow")
         subtitle.setObjectName("Subtitle")
         left.addWidget(subtitle)
         left.addSpacing(8)

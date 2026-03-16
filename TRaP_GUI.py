@@ -3,11 +3,9 @@
 # All comments in English.
 
 import sys
-import os
 import ctypes
 import platform
 from PyQt5.QtCore import QSharedMemory, QCoreApplication, Qt
-from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication, QMessageBox
 
 # Import from the new optimized wizard v2
@@ -59,10 +57,6 @@ def main():
     wizard._shell = shell  # For step skipping functionality
 
     shell.setWindowTitle("TRaP - Raman Processing Application")
-    _logo = os.path.join(os.path.dirname(__file__), 'TRaP_logo.png')
-    if os.path.exists(_logo):
-        app.setWindowIcon(QIcon(_logo))
-        shell.setWindowIcon(QIcon(_logo))
     screen = app.primaryScreen().availableGeometry()
     shell.resize(min(1024, int(screen.width() * 0.9)), min(680, int(screen.height() * 0.9)))
     shell.move(screen.center() - shell.rect().center())
