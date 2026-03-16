@@ -116,22 +116,72 @@ class ConfigManager:
     def load_default_config(self):
         """Load the default config if it exists."""
         if os.path.exists(DEFAULT_CONFIG):
-            self.load_config(DEFAULT_CONFIG)
+            self.load_config(DEFAULT_CONFIG)  # warnings silently ignored at startup
 
-    def load_config(self, file_path: str) -> bool:
-        """Load config from specified file."""
+    VALID_SYSTEMS = {"Cart", "Renishaw", "Portable", "MANTIS"}
+    VALID_RANGES  = {"Fingerprint", "High WVN", "Full Range", "Custom"}
+
+    def load_config(self, file_path: str) -> tuple:
+        """Load config from specified file.
+
+        Returns (success: bool, warnings: list[str]).
+        Invalid fields are reset to their default values.
+        """
         if not os.path.exists(file_path):
-            return False
+            return False, [f"File not found: {file_path}"]
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 loaded = json.load(f)
-                self.params.update(loaded)
-                self.params["Config File"] = file_path
-                self.add_to_recent(file_path, self.params.get("Name", ""))
-            return True
+        except json.JSONDecodeError as e:
+            return False, [f"Invalid JSON: {e}"]
         except Exception as e:
-            print(f"Failed to load config: {e}")
-            return False
+            return False, [f"Failed to read file: {e}"]
+
+        if not isinstance(loaded, dict):
+            return False, ["Config file does not contain a JSON object."]
+
+        warnings = []
+        validated = self.DEFAULT_PARAMS.copy()
+
+        # String fields — accept any string
+        for key in ("Name", "Spectrograph Name", "Last Modified", "Config File"):
+            val = loaded.get(key, self.DEFAULT_PARAMS[key])
+            validated[key] = str(val) if val is not None else self.DEFAULT_PARAMS[key]
+
+        # Enum fields
+        system = loaded.get("System", self.DEFAULT_PARAMS["System"])
+        if system not in self.VALID_SYSTEMS:
+            warnings.append(f"Unknown System '{system}'; reset to '{self.DEFAULT_PARAMS['System']}'.")
+            system = self.DEFAULT_PARAMS["System"]
+        validated["System"] = system
+
+        rr = loaded.get("Raman Shift Range", self.DEFAULT_PARAMS["Raman Shift Range"])
+        if rr not in self.VALID_RANGES:
+            warnings.append(f"Unknown Raman Shift Range '{rr}'; reset to '{self.DEFAULT_PARAMS['Raman Shift Range']}'.")
+            rr = self.DEFAULT_PARAMS["Raman Shift Range"]
+        validated["Raman Shift Range"] = rr
+
+        # Wavelength and Detector are stored as plain strings — just keep them
+        validated["Exc Wavelength"] = str(loaded.get("Exc Wavelength", self.DEFAULT_PARAMS["Exc Wavelength"]))
+        validated["Detector"]       = str(loaded.get("Detector",       self.DEFAULT_PARAMS["Detector"]))
+        validated["Probe"]          = str(loaded.get("Probe",          self.DEFAULT_PARAMS["Probe"]))
+
+        # CCD X / Y — must be non-negative numbers
+        for key in ("CCD X", "CCD Y"):
+            raw = loaded.get(key, self.DEFAULT_PARAMS[key])
+            try:
+                val = float(raw)
+                if val < 0:
+                    raise ValueError("negative")
+                validated[key] = val
+            except (TypeError, ValueError):
+                warnings.append(f"Invalid {key} '{raw}'; reset to 0.")
+                validated[key] = 0.0
+
+        self.params.update(validated)
+        self.params["Config File"] = file_path
+        self.add_to_recent(file_path, self.params.get("Name", ""))
+        return True, warnings
 
     def save_config(self, file_path: str) -> bool:
         """Save config to specified file."""
@@ -703,8 +753,17 @@ class ConfigManagerUI(QDialog):
         """Collect UI values to config params. Returns False if validation fails."""
         params = self.config.params
 
-        # Text fields
-        params["Name"] = self.inputs["Name"].text().strip()
+        # Name — warn if empty but don't block
+        name = self.inputs["Name"].text().strip()
+        if not name:
+            reply = QMessageBox.question(
+                self, "No Name",
+                "Configuration Name is empty. Save anyway?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return False
+        params["Name"] = name
         params["Spectrograph Name"] = self.inputs["Spectrograph Name"].text().strip()
 
         # Combos
@@ -714,17 +773,26 @@ class ConfigManagerUI(QDialog):
         params["Probe"] = self.inputs["Probe"].currentText()
         params["Raman Shift Range"] = self.inputs["Raman Shift Range"].currentText()
 
-        # CCD values
+        # CCD X — must be a positive integer
+        ccd_x_text = self.inputs["CCD X"].text().strip()
         try:
-            params["CCD X"] = float(self.inputs["CCD X"].text() or 0)
+            ccd_x = int(float(ccd_x_text)) if ccd_x_text else 0
+            if ccd_x < 0:
+                raise ValueError("negative")
+            params["CCD X"] = ccd_x
         except ValueError:
-            QMessageBox.warning(self, "Invalid Input", "CCD X must be a number.")
+            QMessageBox.warning(self, "Invalid Input", "CCD X must be a non-negative integer.")
             return False
 
+        # CCD Y — must be a positive integer
+        ccd_y_text = self.inputs["CCD Y"].text().strip()
         try:
-            params["CCD Y"] = float(self.inputs["CCD Y"].text() or 0)
+            ccd_y = int(float(ccd_y_text)) if ccd_y_text else 0
+            if ccd_y < 0:
+                raise ValueError("negative")
+            params["CCD Y"] = ccd_y
         except ValueError:
-            QMessageBox.warning(self, "Invalid Input", "CCD Y must be a number.")
+            QMessageBox.warning(self, "Invalid Input", "CCD Y must be a non-negative integer.")
             return False
 
         return True
@@ -788,10 +856,16 @@ class ConfigManagerUI(QDialog):
         """Load a recent config item on double-click."""
         path = item.data(Qt.UserRole)
         if path and os.path.exists(path):
-            if self.config.load_config(path):
+            ok, warnings = self.config.load_config(path)
+            if ok:
                 self._load_params_to_ui()
                 self._populate_recent_list()
-                QMessageBox.information(self, "Loaded", f"Configuration loaded:\n{os.path.basename(path)}")
+                msg = f"Configuration loaded:\n{os.path.basename(path)}"
+                if warnings:
+                    msg += "\n\nWarnings:\n" + "\n".join(f"• {w}" for w in warnings)
+                QMessageBox.information(self, "Loaded", msg)
+            else:
+                QMessageBox.critical(self, "Error", "Failed to load configuration:\n" + "\n".join(warnings))
 
     def _load_selected_recent(self):
         """Load the selected recent config."""
@@ -815,12 +889,16 @@ class ConfigManagerUI(QDialog):
             "JSON Files (*.json);;All Files (*)"
         )
         if file_path:
-            if self.config.load_config(file_path):
+            ok, warnings = self.config.load_config(file_path)
+            if ok:
                 self._load_params_to_ui()
                 self._populate_recent_list()
-                QMessageBox.information(self, "Loaded", f"Configuration loaded:\n{os.path.basename(file_path)}")
+                msg = f"Configuration loaded:\n{os.path.basename(file_path)}"
+                if warnings:
+                    msg += "\n\nWarnings:\n" + "\n".join(f"• {w}" for w in warnings)
+                QMessageBox.information(self, "Loaded", msg)
             else:
-                QMessageBox.critical(self, "Error", "Failed to load configuration file.")
+                QMessageBox.critical(self, "Error", "Failed to load configuration:\n" + "\n".join(warnings))
 
     def _save_as_default(self):
         """Save current config as default."""
