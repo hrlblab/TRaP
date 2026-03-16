@@ -270,8 +270,10 @@ class BatchWorker(QThread):
                 if self.is_renishaw:
                     # Renishaw: data file contains [wavenumber, intensity]
                     if arr.ndim == 2 and arr.shape[1] >= 2:
-                        file_wvn = arr[:, 0].flatten()
-                        raw_spec = arr[:, 1].flatten()
+                        # Sort ascending by wavenumber (Renishaw exports descending)
+                        sort_idx = np.argsort(arr[:, 0])
+                        file_wvn = arr[sort_idx, 0].flatten()
+                        raw_spec = arr[sort_idx, 1].flatten()
                     else:
                         raw_spec = arr.ravel()
                         file_wvn = self.wvn  # fallback to provided wvn
@@ -926,8 +928,10 @@ class BatchPMeanUI(QMainWindow):
             if is_renishaw:
                 # Renishaw: data contains [wavenumber, intensity]
                 if arr.ndim == 2 and arr.shape[1] >= 2:
-                    file_wvn = arr[:, 0].flatten()
-                    raw_spec = arr[:, 1].flatten()
+                    # Sort ascending by wavenumber (Renishaw exports descending)
+                    sort_idx = np.argsort(arr[:, 0])
+                    file_wvn = arr[sort_idx, 0].flatten()
+                    raw_spec = arr[sort_idx, 1].flatten()
                 else:
                     raw_spec = arr.ravel()
                     file_wvn = np.arange(len(raw_spec), dtype=np.float64)

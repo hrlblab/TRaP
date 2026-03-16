@@ -1203,8 +1203,10 @@ class P_Mean_Process_UI(QMainWindow):
 
                 if data_arr.ndim == 2 and data_arr.shape[1] >= 2:
                     # Two-column format: [wavenumber, intensity]
-                    self.wvnFull = data_arr[:, 0].flatten()
-                    self.current_spect = data_arr[:, 1].flatten()
+                    # Sort ascending by wavenumber (Renishaw exports descending)
+                    sort_idx = np.argsort(data_arr[:, 0])
+                    self.wvnFull = data_arr[sort_idx, 0].flatten()
+                    self.current_spect = data_arr[sort_idx, 1].flatten()
                 else:
                     # Single column - use index as x-axis
                     self.current_spect = data_arr.flatten()
