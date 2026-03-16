@@ -823,10 +823,11 @@ class SystemSelectWizard(QWidget):
 
         # Renishaw provides its own calibrated wavenumber axis and needs no
         # external WL correction — auto-check both skip flags.
-        # For any other system, reset both to unchecked so the user decides.
+        # For other systems, leave checkboxes as-is (respect the user's choice).
         is_renishaw = self.config.params.get("System") == "Renishaw"
-        self.chk_has_cal.setChecked(is_renishaw)
-        self.chk_has_resp.setChecked(is_renishaw)
+        if is_renishaw:
+            self.chk_has_cal.setChecked(True)
+            self.chk_has_resp.setChecked(True)
 
         # Determine next step based on skip flags (updated by setChecked above)
         if self.has_calibration_file and self.has_response_correction:
