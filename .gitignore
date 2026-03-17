@@ -8,14 +8,20 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Visual Studio
+# IDE / editor folders
 .vs/
+.idea/
+.claude/
+
+# Docs (paper drafts, PDFs, figures)
+docs/
 
 # Data files
 data/
 
 # Config files (may contain local paths)
 configs/
+p_mean_config.json
 
 # Batch files
 *.bat
