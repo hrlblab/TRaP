@@ -1,8 +1,6 @@
-# TRaP - Raman Spectroscopy Processing Application
+# TRaP: An open-source, reproducible framework for Raman spectral processing across heterogeneous systems
 
-A standardized Raman spectroscopy data processing tool with a wizard-style GUI, built with PyQt5.
-
-Developed at **Vanderbilt Biophotonics Center**.
+Developed at **Vanderbilt University**.
 
 ## Features
 
