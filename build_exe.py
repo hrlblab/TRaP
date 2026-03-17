@@ -9,27 +9,41 @@ import subprocess
 import sys
 import os
 import shutil
+import glob
 
 # Get the directory where this script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(SCRIPT_DIR)
 
+# Detect conda environment Library/bin (for Qt DLLs on Windows)
+CONDA_LIB_BIN = os.path.join(sys.prefix, "Library", "bin")
+
+
 def check_tool_installed(tool_name):
-    """Check if a tool is installed"""
     try:
         subprocess.run([sys.executable, "-m", "pip", "show", tool_name],
-                      capture_output=True, check=True)
+                       capture_output=True, check=True)
         return True
     except subprocess.CalledProcessError:
         return False
 
+
 def install_tool(tool_name):
-    """Install a tool via pip"""
     print(f"Installing {tool_name}...")
     subprocess.run([sys.executable, "-m", "pip", "install", tool_name], check=True)
 
+
+def get_conda_qt_binaries():
+    """Return --add-binary args for all Qt DLLs in the conda env."""
+    entries = []
+    if not os.path.isdir(CONDA_LIB_BIN):
+        return entries
+    for dll in glob.glob(os.path.join(CONDA_LIB_BIN, "Qt5*.dll")):
+        entries += ["--add-binary", f"{dll};."]
+    return entries
+
+
 def build_with_pyinstaller():
-    """Build using PyInstaller (--onedir mode for fast startup)"""
     print("=" * 50)
     print("Building with PyInstaller (--onedir mode)")
     print("=" * 50)
@@ -44,11 +58,16 @@ def build_with_pyinstaller():
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
-        "--onedir",                          # Use onedir for fast startup
-        "--windowed",                        # No console window
-        "--name", "TRaP",                    # Output name
-        "--icon", "vanderbilt_biophotonics_center_logo.jpg",  # App icon
-        # Include data files
+        "--onedir",
+        "--windowed",
+        "--name", "TRaP",
+        "--icon", "vanderbilt_biophotonics_center_logo.jpg",
+        # Runtime hook: registers _internal/ as a DLL search directory
+        # before any imports — required for PyInstaller 6.x + conda PyQt5
+        "--runtime-hook", "pyi_rthook.py",
+        # Search paths for dependency analysis
+        "--paths", CONDA_LIB_BIN,
+        # Data files
         "--add-data", "config.json;.",
         "--add-data", "configs;configs",
         "--add-data", "resources;resources",
@@ -75,13 +94,12 @@ def build_with_pyinstaller():
         # Collect all submodules
         "--collect-submodules", "UI_utils",
         "--collect-submodules", "utils",
-        # Exclude unnecessary modules to reduce size
+        # Excludes
         "--exclude-module", "tkinter",
         "--exclude-module", "matplotlib.tests",
         "--exclude-module", "numpy.tests",
         "--exclude-module", "PySide6",
         "--exclude-module", "PySide2",
-        # Exclude torch and related (not used by TRaP, but present in dev env)
         "--exclude-module", "torch",
         "--exclude-module", "torchvision",
         "--exclude-module", "torchaudio",
@@ -95,6 +113,10 @@ def build_with_pyinstaller():
         "TRaP_GUI.py"
     ]
 
+    # Append conda Qt DLL binaries (fixes DLL load errors on machines
+    # without a full conda install)
+    cmd += get_conda_qt_binaries()
+
     print("Running command:")
     print(" ".join(cmd))
     print()
@@ -107,8 +129,8 @@ def build_with_pyinstaller():
     print(f"Output: {os.path.join(SCRIPT_DIR, 'dist', 'TRaP', 'TRaP.exe')}")
     print("=" * 50)
 
+
 def build_with_nuitka():
-    """Build using Nuitka (compiles to C, fastest startup)"""
     print("=" * 50)
     print("Building with Nuitka (fastest startup)")
     print("=" * 50)
@@ -123,23 +145,19 @@ def build_with_nuitka():
 
     cmd = [
         sys.executable, "-m", "nuitka",
-        "--standalone",                      # Create standalone distribution
-        "--windows-console-mode=disable",    # No console window (GUI app)
-        "--enable-plugin=pyqt5",             # PyQt5 plugin
-        "--include-package=UI_utils",        # Include UI_utils package
-        "--include-package=utils",           # Include utils package
-        # Include data files
+        "--standalone",
+        "--windows-console-mode=disable",
+        "--enable-plugin=pyqt5",
+        "--include-package=UI_utils",
+        "--include-package=utils",
         "--include-data-files=config.json=config.json",
         "--include-data-dir=configs=configs",
         "--include-data-dir=resources=resources",
         "--include-data-dir=data=data",
         "--include-data-files=vanderbilt_biophotonics_center_logo.jpg=vanderbilt_biophotonics_center_logo.jpg",
-        # Output settings
         "--output-dir=dist",
         "--output-filename=TRaP.exe",
-        # Optimization
-        "--assume-yes-for-downloads",        # Auto download dependencies
-        # Main script
+        "--assume-yes-for-downloads",
         "TRaP_GUI.py"
     ]
 
@@ -155,8 +173,8 @@ def build_with_nuitka():
     print(f"Output: {os.path.join(SCRIPT_DIR, 'dist', 'TRaP_GUI.dist')}")
     print("=" * 50)
 
+
 def main():
-    # Parse command line argument
     if len(sys.argv) > 1:
         method = sys.argv[1].lower()
     else:
@@ -165,6 +183,7 @@ def main():
     print(f"TRaP Build Script")
     print(f"Working directory: {SCRIPT_DIR}")
     print(f"Build method: {method}")
+    print(f"Conda Library/bin: {CONDA_LIB_BIN}")
     print()
 
     if method == "pyinstaller":
@@ -175,6 +194,7 @@ def main():
         print(f"Unknown method: {method}")
         print("Usage: python build_exe.py [pyinstaller|nuitka]")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
