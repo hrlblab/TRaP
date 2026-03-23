@@ -18,7 +18,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pyqt5 scipy numpy matplotlib openpyxl pyinstaller
+          pip install pyqt5 scipy numpy pandas matplotlib openpyxl pyinstaller
 
       - name: Build
         run: python build_exe.py pyinstaller
@@ -40,7 +40,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pyqt5 scipy numpy matplotlib openpyxl pyinstaller
+          pip install pyqt5 scipy numpy pandas matplotlib openpyxl pyinstaller
 
       - name: Build
         run: python build_exe.py pyinstaller

@@ -70,6 +70,9 @@ def build_with_pyinstaller():
         "--add-data", f"resources{S}resources",
         "--add-data", f"vanderbilt_biophotonics_center_logo.jpg{S}.",
         # Hidden imports
+        "--hidden-import", "pandas",
+        "--hidden-import", "pandas.core",
+        "--hidden-import", "pandas.io.formats.style",
         "--hidden-import", "PyQt5.sip",
         "--hidden-import", "PyQt5.QtCore",
         "--hidden-import", "PyQt5.QtGui",
