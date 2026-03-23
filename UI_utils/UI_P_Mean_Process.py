@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QPushButton,
     QLineEdit, QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox,
     QComboBox, QListWidget, QGroupBox, QFormLayout, QSplitter,
-    QProgressBar, QFrame, QSizePolicy, QScrollArea
+    QProgressBar, QFrame, QSizePolicy, QScrollArea, QCheckBox
 )
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont
@@ -251,19 +251,21 @@ class DualPlotCanvas(FigureCanvas):
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
-    def plot_comparison(self, wvn, before, after, before_label="Before", after_label="After"):
+    def plot_comparison(self, wvn, before, after, before_label="Before", after_label="After", wvn_after=None):
         """Plot before/after comparison."""
         fs_title, fs_label, _, fs_legend = self._font_sizes()
         self.ax_compare.clear()
         self._apply_ax_style(self.ax_compare)
 
         if wvn is not None and len(wvn) == len(before):
-            self.ax_compare.plot(wvn, before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.7, label=before_label)
+            self.ax_compare.plot(wvn, before, color="#5B9BD5", linewidth=1.2, alpha=0.8, label=before_label)
             if after is not None and len(after) == len(wvn):
                 self.ax_compare.plot(wvn, after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
+            elif after is not None and wvn_after is not None:
+                self.ax_compare.plot(wvn_after, after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
             self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
         else:
-            self.ax_compare.plot(before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.7, label=before_label)
+            self.ax_compare.plot(before, color="#5B9BD5", linewidth=1.2, alpha=0.8, label=before_label)
             if after is not None:
                 self.ax_compare.plot(after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
             self.ax_compare.set_xlabel("Index", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
@@ -450,6 +452,7 @@ class P_Mean_Process_UI(QMainWindow):
             "Polyfit Preview",
             "FluorescenceBackgroundSubtraction",
             "Noise Smoothing",
+            "Truncate2",
             "Normalization"
         ]
         self.current_step_index = 0
@@ -570,12 +573,30 @@ class P_Mean_Process_UI(QMainWindow):
         for row_w in [self.row_sgorder, self.row_sgframe, self.row_mawindow, self.row_mediank]:
             params_outer.addWidget(row_w)
 
+        # Truncation 2 (optional, before Normalization)
+        add_step_header(params_outer, "Truncation 2 (Optional)")
+        self.edit_start2 = make_field("900")
+        self.edit_stop2  = make_field("1700")
+        self.chk_truncate2 = QCheckBox("Enable second truncation")
+        self.chk_truncate2.setChecked(False)
+        params_outer.addWidget(self.chk_truncate2)
+        self.row_trunc2_start = make_row_widget("Start2 (cm⁻¹):", self.edit_start2)
+        self.row_trunc2_stop  = make_row_widget("Stop2  (cm⁻¹):", self.edit_stop2)
+        params_outer.addWidget(self.row_trunc2_start)
+        params_outer.addWidget(self.row_trunc2_stop)
+        self.chk_truncate2.stateChanged.connect(self._update_truncate2_visibility)
+        self._update_truncate2_visibility()
+
         # Fluorescence BG Subtraction
         add_step_header(params_outer, "Fluorescence BG Subtraction")
         self.edit_polyorder = make_field("7")
         self.edit_fbs_maxiter = make_field("50")
+        self.edit_fbs_exclude = QLineEdit("")
+        self.edit_fbs_exclude.setPlaceholderText("e.g. 800-900, 1650-1800")
+        self.edit_fbs_exclude.setMinimumHeight(32)
         add_row(params_outer, "Poly Order:", self.edit_polyorder)
         add_row(params_outer, "Max Iterations:", self.edit_fbs_maxiter)
+        add_row(params_outer, "Exclude Regions:", self.edit_fbs_exclude)
 
         # Normalization
         add_step_header(params_outer, "Normalization")
@@ -608,7 +629,7 @@ class P_Mean_Process_UI(QMainWindow):
         is_renishaw = self._is_renishaw_system()
         system_text = f"System: {self.current_system}"
         if is_renishaw:
-            system_text += " (WL Correction & Calibration not required)"
+            system_text += " (Calibration not required; WL Correction optional)"
         self.lbl_system_info = QLabel(system_text)
         self.lbl_system_info.setWordWrap(True)
         self.lbl_system_info.setStyleSheet(
@@ -755,6 +776,27 @@ class P_Mean_Process_UI(QMainWindow):
         splitter.setSizes([360, 640])
         main_layout.addWidget(splitter)
 
+    def _update_truncate2_visibility(self):
+        enabled = self.chk_truncate2.isChecked()
+        self.row_trunc2_start.setVisible(enabled)
+        self.row_trunc2_stop.setVisible(enabled)
+
+    def _parse_exclude_mask(self, wvn):
+        """Parse FBS exclude regions text → boolean mask over wvn."""
+        text = self.edit_fbs_exclude.text().strip()
+        if not text:
+            return None
+        mask = np.zeros(len(wvn), dtype=bool)
+        for part in text.split(','):
+            part = part.strip()
+            if '-' in part:
+                try:
+                    lo, hi = part.split('-', 1)
+                    mask |= (wvn >= float(lo)) & (wvn <= float(hi))
+                except ValueError:
+                    pass
+        return mask if mask.any() else None
+
     def _update_denoise_visibility(self):
         """Show/hide denoise parameters based on selected method."""
         method = self.combo_denoise.currentText()
@@ -786,11 +828,18 @@ class P_Mean_Process_UI(QMainWindow):
 
     def _update_plots(self, show_comparison=True):
         """Update both plots."""
+        # Build step name for title
+        if self.current_step_index < len(self.processing_steps):
+            step_name = self.processing_steps[self.current_step_index]
+        else:
+            step_name = "Complete"
+        title = f"Current: Step {self.current_step_index} — {step_name}"
+
         # Current spectrum
         self.canvas.plot_current(
             self.current_wvn.flatten() if self.current_wvn is not None else None,
             self.current_spect.flatten() if self.current_spect is not None else np.array([]),
-            title=f"Current: Step {self.current_step_index}"
+            title=title
         )
 
         # Comparison
@@ -801,21 +850,14 @@ class P_Mean_Process_UI(QMainWindow):
             else:
                 wvn_for_compare = None
 
-            # If lengths match, show both
-            if len(self.previous_spect) == len(self.current_spect):
-                self.canvas.plot_comparison(
-                    wvn_for_compare,
-                    self.previous_spect.flatten(),
-                    self.current_spect.flatten(),
-                    "Before", "After"
-                )
-            else:
-                self.canvas.plot_comparison(
-                    wvn_for_compare,
-                    self.previous_spect.flatten(),
-                    None,
-                    "Previous State", ""
-                )
+            # Always show both before and after, even when lengths differ (e.g. after Truncate)
+            self.canvas.plot_comparison(
+                wvn_for_compare,
+                self.previous_spect.flatten(),
+                self.current_spect.flatten(),
+                "Before", "After",
+                wvn_after=self.current_wvn.flatten() if self.current_wvn is not None else None
+            )
 
     def add_history(self, op_name):
         """Add processing step to history."""
@@ -838,6 +880,7 @@ class P_Mean_Process_UI(QMainWindow):
             config["Stop"] = float(self.edit_stop.text())
             config["Polyorder"] = int(self.edit_polyorder.text())
             config["FBSMaxIter"] = int(self.edit_fbs_maxiter.text())
+            config["FBSExclude"] = self.edit_fbs_exclude.text().strip()
             config["NormalizeMethod"] = self.combo_norm.currentText()
             config["DenoiseMethod"] = self.combo_denoise.currentText()
             config["BinWidth"] = float(self.edit_binwidth.text())
@@ -845,6 +888,9 @@ class P_Mean_Process_UI(QMainWindow):
             config["SGframe"] = int(self.edit_sgframe.text())
             config["MAWindow"] = int(self.edit_mawindow.text())
             config["MedianKernel"] = int(self.edit_mediank.text())
+            config["Truncate2Enabled"] = self.chk_truncate2.isChecked()
+            config["Start2"] = float(self.edit_start2.text())
+            config["Stop2"] = float(self.edit_stop2.text())
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Parameter error: {e}")
             return
@@ -931,17 +977,26 @@ class P_Mean_Process_UI(QMainWindow):
                     QMessageBox.warning(self, "Config Warnings",
                                         "Loaded with issues:\n• " + "\n• ".join(warnings))
 
+                fbs_exclude = str(config.get("FBSExclude", ""))
+                t2_enabled  = bool(config.get("Truncate2Enabled", False))
+                start2 = checked_float("Start2", 900, 0)
+                stop2  = checked_float("Stop2",  1700, 0)
+
                 self.edit_start.setText(str(start))
                 self.edit_stop.setText(str(stop))
                 self.edit_binwidth.setText(str(binwidth))
                 self.edit_polyorder.setText(str(poly))
                 self.edit_fbs_maxiter.setText(str(maxiter))
+                self.edit_fbs_exclude.setText(fbs_exclude)
                 self.combo_norm.setCurrentText(nm)
                 self.combo_denoise.setCurrentText(dn)
                 self.edit_sgorder.setText(str(sgorder))
                 self.edit_sgframe.setText(str(sgframe))
                 self.edit_mawindow.setText(str(mawin))
                 self.edit_mediank.setText(str(medk))
+                self.chk_truncate2.setChecked(t2_enabled)
+                self.edit_start2.setText(str(start2))
+                self.edit_stop2.setText(str(stop2))
                 self.lbl_status.setText(f"Config loaded: {filepath}")
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"Failed to load config:\n{e}")
@@ -987,17 +1042,16 @@ class P_Mean_Process_UI(QMainWindow):
                 return
 
             elif step == "SubtractBaseline":
-                self.current_spect = subtractBaseline(self.current_spect)
-                self.operations.append("SubtractBaseline")
+                if self._is_renishaw_system():
+                    self.operations.append("SubtractBaseline(Skipped-Renishaw)")
+                    self.lbl_status.setText("Dark baseline subtraction skipped for Renishaw/microscope system.")
+                else:
+                    self.current_spect = subtractBaseline(self.current_spect)
+                    self.operations.append("SubtractBaseline")
 
             elif step == "SpectralResponseCorrection":
-                if self._is_renishaw_system():
-                    # Skip spectral response correction for Renishaw system
-                    self.operations.append("SpectralResponseCorrection(Skipped-Renishaw)")
-                    self.lbl_status.setText("SpectralResponseCorrection skipped for Renishaw system.")
-                else:
-                    self.current_spect = SpectralResponseCorrection(self.wlCorr, self.current_spect)
-                    self.operations.append("SpectralResponseCorrection")
+                self.current_spect = SpectralResponseCorrection(self.wlCorr, self.current_spect)
+                self.operations.append("SpectralResponseCorrection")
 
             elif step == "CosmicRayRemoval":
                 self.current_spect = CosmicRayRemoval(self.current_spect)
@@ -1032,7 +1086,8 @@ class P_Mean_Process_UI(QMainWindow):
             elif step == "Polyfit Preview":
                 polyorder = int(self.edit_polyorder.text())
                 fbs_maxiter = int(self.edit_fbs_maxiter.text())
-                base, _ = FluorescenceBackgroundSubtraction(self.current_spect.flatten(), polyorder, max_iter=fbs_maxiter)
+                exclude_mask = self._parse_exclude_mask(self.current_wvn.flatten())
+                base, _ = FluorescenceBackgroundSubtraction(self.current_spect.flatten(), polyorder, max_iter=fbs_maxiter, exclude_mask=exclude_mask)
                 # Show polyfit preview without modifying data
                 wvn = self.current_wvn.flatten() if self.current_wvn is not None else None
                 self.canvas.plot_polyfit(wvn, self.current_spect.flatten(), base)
@@ -1046,8 +1101,10 @@ class P_Mean_Process_UI(QMainWindow):
             elif step == "FluorescenceBackgroundSubtraction":
                 polyorder = int(self.edit_polyorder.text())
                 fbs_maxiter = int(self.edit_fbs_maxiter.text())
+                exclude_mask = self._parse_exclude_mask(self.current_wvn.flatten())
                 base, finalSpect = FluorescenceBackgroundSubtraction(
-                    self.current_spect.flatten(), polyorder, max_iter=fbs_maxiter
+                    self.current_spect.flatten(), polyorder, max_iter=fbs_maxiter,
+                    exclude_mask=exclude_mask
                 )
                 self.current_spect = finalSpect
                 self.operations.append(f"FBS(order={polyorder},iter={fbs_maxiter})")
@@ -1072,6 +1129,20 @@ class P_Mean_Process_UI(QMainWindow):
                     self.operations.append(f"NoiseSmoothing(Med,k={k})")
                 else:
                     self.operations.append("NoiseSmoothing(None)")
+
+            elif step == "Truncate2":
+                if self.chk_truncate2.isChecked():
+                    start2 = float(self.edit_start2.text())
+                    stop2  = float(self.edit_stop2.text())
+                    if stop2 <= start2:
+                        QMessageBox.warning(self, "Error", "Truncate2: Stop must be > Start!")
+                        return
+                    self.current_wvn, self.current_spect = Truncate(
+                        start2, stop2, self.current_wvn, self.current_spect
+                    )
+                    self.operations.append(f"Truncate2({start2}-{stop2})")
+                else:
+                    self.operations.append("Truncate2(Skipped)")
 
             elif step == "Normalization":
                 norm_method = self.combo_norm.currentText().lower()
@@ -1135,7 +1206,7 @@ class P_Mean_Process_UI(QMainWindow):
     def _update_file_widgets_visibility(self):
         """Show/hide WL Correction and Calibration widgets based on system type."""
         is_renishaw = self._is_renishaw_system()
-        self.wl_widget.setVisible(not is_renishaw)
+        self.wl_widget.setVisible(True)          # Renishaw may also use WL correction
         self.cal_widget.setVisible(not is_renishaw)
 
     def on_select_data_file(self):
@@ -1214,8 +1285,15 @@ class P_Mean_Process_UI(QMainWindow):
 
                 self.rawSpect = self.current_spect.copy()
                 self.current_wvn = self.wvnFull.copy()
-                # Renishaw doesn't need WL correction
-                self.wlCorr = np.ones_like(self.current_spect).reshape(-1, 1)
+                # Load WL correction if provided; otherwise use ones (SRC will be identity)
+                if self.wlcorr_file:
+                    try:
+                        wl_df = rdata.read_txt_file(self.wlcorr_file)
+                        self.wlCorr = wl_df.to_numpy().astype(np.float64)
+                    except Exception:
+                        self.wlCorr = np.ones_like(self.current_spect).reshape(-1, 1)
+                else:
+                    self.wlCorr = np.ones_like(self.current_spect).reshape(-1, 1)
 
             else:
                 # Non-Renishaw: Load three separate files

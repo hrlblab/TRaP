@@ -250,7 +250,7 @@ class ConfigManagerUI(QDialog):
             }
         },
         "Renishaw": {
-            "wavelengths": ["785", "633"],
+            "wavelengths": ["532", "633", "785", "830", "1064"],
             "detectors": {}
         },
         "Portable": {

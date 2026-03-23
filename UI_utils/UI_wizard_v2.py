@@ -821,26 +821,23 @@ class SystemSelectWizard(QWidget):
         """Called after config is saved in Config Manager."""
         self.step_completed[0] = True
 
-        # Renishaw provides its own calibrated wavenumber axis and needs no
-        # external WL correction — auto-check both skip flags.
-        # For other systems, leave checkboxes as-is (respect the user's choice).
+        # Renishaw provides its own wavenumber axis — skip X-axis calibration step.
+        # Renishaw DOES need spectral response correction — leave chk_has_resp as-is.
         is_renishaw = self.config.params.get("System") == "Renishaw"
         if is_renishaw:
             self.chk_has_cal.setChecked(True)
-            self.chk_has_resp.setChecked(True)
 
-        # Determine next step based on skip flags (updated by setChecked above)
+        # Determine next step based on skip flags
         if self.has_calibration_file and self.has_response_correction:
             self.step = 3
-            msg = "Configuration saved. Renishaw system detected — calibration and " \
-                  "spectral response correction steps are not required.\n" \
-                  "Proceeding to Spectrum Process." if is_renishaw else \
-                  "Configuration saved. Calibration and Response Correction ready.\n" \
+            msg = "Configuration saved. Calibration and Response Correction ready.\n" \
                   "Proceeding to Spectrum Process."
         elif self.has_calibration_file:
             self.step = 2
-            msg = "Configuration saved. Calibration ready.\n" \
-                  "Proceeding to Response Correction."
+            msg = ("Configuration saved. Renishaw system detected — X-axis calibration skipped "
+                   "(wavenumber from data file).\nProceeding to Spectral Response Correction."
+                   if is_renishaw else
+                   "Configuration saved. Calibration ready.\nProceeding to Response Correction.")
         else:
             self.step = 1
             msg = "Configuration saved.\n" \

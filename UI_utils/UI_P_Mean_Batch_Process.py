@@ -48,13 +48,17 @@ def default_config() -> dict:
         "Stop": 1700,
         "Polyorder": 7,
         "FBSMaxIter": 50,
+        "FBSExclude": "",
         "NormalizeMethod": "Mean",
         "DenoiseMethod": "Savitzky-Golay",
         "BinWidth": 3.5,
         "SGorder": 2,
         "SGframe": 7,
         "MAWindow": 5,
-        "MedianKernel": 5
+        "MedianKernel": 5,
+        "Truncate2Enabled": False,
+        "Start2": 900,
+        "Stop2": 1700
     }
 
 
@@ -154,7 +158,24 @@ def save_config_file(config: dict, config_file: str):
         json.dump(config, f, indent=2, ensure_ascii=False)
 
 
-def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config: dict, skip_wl_correction: bool = False):
+def _parse_exclude_mask(wvn: np.ndarray, exclude_text: str):
+    """Build boolean exclude mask from wavenumber array and range string."""
+    if not exclude_text or not exclude_text.strip():
+        return None
+    mask = np.zeros(len(wvn), dtype=bool)
+    for part in exclude_text.split(','):
+        part = part.strip()
+        if '-' in part:
+            try:
+                lo, hi = part.split('-', 1)
+                mask |= (wvn >= float(lo)) & (wvn <= float(hi))
+            except ValueError:
+                pass
+    return mask if mask.any() else None
+
+
+def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config: dict,
+                   skip_wl_correction: bool = False, skip_baseline: bool = False):
     """P-Mean pipeline using config parameters.
 
     Args:
@@ -162,10 +183,11 @@ def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, confi
         wl_corr: WL correction factor (ignored if skip_wl_correction=True)
         wvn: Wavenumber array
         config: Processing configuration
-        skip_wl_correction: If True, skip spectral response correction (for Renishaw)
+        skip_wl_correction: If True, skip spectral response correction
+        skip_baseline: If True, skip dark baseline subtraction (Renishaw/microscope)
     """
     # 1) Baseline, response correction, cosmic ray removal
-    spect = subtractBaseline(data)
+    spect = data if skip_baseline else subtractBaseline(data)
     if not skip_wl_correction and wl_corr is not None:
         spect = SpectralResponseCorrection(wl_corr, spect)
     spect = CosmicRayRemoval(spect)
@@ -181,10 +203,12 @@ def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, confi
     binwidth = float(config.get("BinWidth", 3.5))
     binned_spect, new_wvn = Binning(wvn_trunc[0], wvn_trunc[-1], wvn_trunc, spect_trunc, binwidth=binwidth)
 
-    # 4) Fluorescence background subtraction
+    # 4) Fluorescence background subtraction (with optional exclusion regions)
     polyorder = int(config.get("Polyorder", 7))
     fbs_maxiter = int(config.get("FBSMaxIter", 50))
-    _, fbs_spect = FluorescenceBackgroundSubtraction(binned_spect, polyorder, max_iter=fbs_maxiter)
+    exclude_mask = _parse_exclude_mask(new_wvn, str(config.get("FBSExclude", "")))
+    _, fbs_spect = FluorescenceBackgroundSubtraction(binned_spect, polyorder, max_iter=fbs_maxiter,
+                                                      exclude_mask=exclude_mask)
 
     # 5) Noise smoothing
     method = str(config.get("DenoiseMethod", "Savitzky-Golay"))
@@ -205,7 +229,14 @@ def p_mean_process(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, confi
     else:
         finalSpect = fbs_spect
 
-    # 6) Normalization
+    # 6) Optional second truncation (before normalization)
+    if config.get("Truncate2Enabled", False):
+        start2 = float(config.get("Start2", 900))
+        stop2  = float(config.get("Stop2", 1700))
+        if stop2 > start2:
+            new_wvn, finalSpect = Truncate(start2, stop2, new_wvn, finalSpect)
+
+    # 7) Normalization
     norm_method = str(config.get("NormalizeMethod", "Mean")).lower()
     finalSpect = Normalize(finalSpect, method=norm_method)
 
@@ -277,8 +308,11 @@ class BatchWorker(QThread):
                     else:
                         raw_spec = arr.ravel()
                         file_wvn = self.wvn  # fallback to provided wvn
+                    # Skip dark baseline for Renishaw/microscope; apply WL correction if provided
                     new_wvn, processed_spec = p_mean_process(
-                        raw_spec, None, file_wvn, self.config, skip_wl_correction=True
+                        raw_spec, self.wl_corr, file_wvn, self.config,
+                        skip_wl_correction=(self.wl_corr is None),
+                        skip_baseline=True
                     )
                 else:
                     # Non-Renishaw: single column intensity data
@@ -475,6 +509,13 @@ class BatchPMeanUI(QMainWindow):
         params_form.addRow("BinWidth:", self.edit_binw)
         params_form.addRow("Polyorder:", self.edit_poly)
         params_form.addRow("FBS Max Iterations:", self.edit_fbs_maxiter)
+
+        self.edit_fbs_exclude = QLineEdit(str(self.config.get("FBSExclude", "")))
+        self.edit_fbs_exclude.setPlaceholderText("e.g. 800-900, 1650-1800")
+        self.edit_fbs_exclude.setMinimumHeight(32)
+        self.edit_fbs_exclude.textChanged.connect(self._mark_config_modified)
+        params_form.addRow("FBS Exclude Regions:", self.edit_fbs_exclude)
+
         params_form.addRow("Normalize Method:", self.combo_norm)
 
         # Noise smoothing settings
@@ -504,6 +545,25 @@ class BatchPMeanUI(QMainWindow):
         params_form.addRow(self.lbl_sgframe, self.edit_sgframe)
         params_form.addRow(self.lbl_mawin, self.edit_mawin)
         params_form.addRow(self.lbl_medk, self.edit_medk)
+
+        # Second truncation (optional, before normalization)
+        self.chk_truncate2 = QCheckBox("Enable second truncation (before normalization)")
+        self.chk_truncate2.setChecked(bool(self.config.get("Truncate2Enabled", False)))
+        self.chk_truncate2.stateChanged.connect(self._update_truncate2_visibility)
+        self.chk_truncate2.stateChanged.connect(self._mark_config_modified)
+        params_form.addRow("Truncation 2:", self.chk_truncate2)
+
+        self.edit_start2 = QLineEdit(str(self.config.get("Start2", 900)))
+        self.edit_start2.setMinimumHeight(32)
+        self.edit_stop2 = QLineEdit(str(self.config.get("Stop2", 1700)))
+        self.edit_stop2.setMinimumHeight(32)
+        for w in [self.edit_start2, self.edit_stop2]:
+            w.textChanged.connect(self._mark_config_modified)
+        self.lbl_start2 = QLabel("Start2 (cm⁻¹):")
+        self.lbl_stop2  = QLabel("Stop2  (cm⁻¹):")
+        params_form.addRow(self.lbl_start2, self.edit_start2)
+        params_form.addRow(self.lbl_stop2,  self.edit_stop2)
+        self._update_truncate2_visibility()
 
         # Config buttons
         cfg_btns = QHBoxLayout()
@@ -589,8 +649,8 @@ class BatchPMeanUI(QMainWindow):
         cal_layout.addWidget(self.lbl_wvn, 1)
         files_layout.addWidget(self.cal_widget)
 
-        # Hide WL/Cal widgets for Renishaw
-        self.wl_widget.setVisible(not is_renishaw)
+        # Renishaw needs WL correction (optional) but not calibration file
+        self.wl_widget.setVisible(True)
         self.cal_widget.setVisible(not is_renishaw)
 
         # Output folder
@@ -730,20 +790,32 @@ class BatchPMeanUI(QMainWindow):
         self.lbl_medk.setVisible(is_md)
         self.edit_medk.setVisible(is_md)
 
+    def _update_truncate2_visibility(self):
+        enabled = self.chk_truncate2.isChecked()
+        self.lbl_start2.setVisible(enabled)
+        self.edit_start2.setVisible(enabled)
+        self.lbl_stop2.setVisible(enabled)
+        self.edit_stop2.setVisible(enabled)
+
     def _gather_config(self) -> dict:
         """Gather config from UI with validation."""
+        t2_enabled = self.chk_truncate2.isChecked()
         cfg = {
             "Start": float(self.edit_start.text()),
             "Stop": float(self.edit_stop.text()),
             "BinWidth": float(self.edit_binw.text()),
             "Polyorder": int(self.edit_poly.text()),
             "FBSMaxIter": int(self.edit_fbs_maxiter.text()),
+            "FBSExclude": self.edit_fbs_exclude.text().strip(),
             "NormalizeMethod": self.combo_norm.currentText(),
             "DenoiseMethod": self.combo_denoise.currentText(),
             "SGorder": int(self.edit_sgorder.text()),
             "SGframe": int(self.edit_sgframe.text()),
             "MAWindow": int(self.edit_mawin.text()),
             "MedianKernel": int(self.edit_medk.text()),
+            "Truncate2Enabled": t2_enabled,
+            "Start2": float(self.edit_start2.text()),
+            "Stop2": float(self.edit_stop2.text()),
         }
 
         if cfg["Stop"] <= cfg["Start"]:
@@ -753,6 +825,8 @@ class BatchPMeanUI(QMainWindow):
         if cfg["DenoiseMethod"] == "Savitzky-Golay":
             if cfg["SGframe"] < 3 or cfg["SGframe"] % 2 == 0:
                 raise ValueError("SGframe must be odd >= 3")
+        if t2_enabled and cfg["Stop2"] <= cfg["Start2"]:
+            raise ValueError("Truncate2: Stop2 must be > Start2")
 
         return cfg
 
@@ -763,13 +837,18 @@ class BatchPMeanUI(QMainWindow):
         self.edit_binw.setText(str(cfg.get("BinWidth", 3.5)))
         self.edit_poly.setText(str(cfg.get("Polyorder", 7)))
         self.edit_fbs_maxiter.setText(str(cfg.get("FBSMaxIter", 50)))
+        self.edit_fbs_exclude.setText(str(cfg.get("FBSExclude", "")))
         self.combo_norm.setCurrentText(cfg.get("NormalizeMethod", "Mean"))
         self.combo_denoise.setCurrentText(cfg.get("DenoiseMethod", "Savitzky-Golay"))
         self.edit_sgorder.setText(str(cfg.get("SGorder", 2)))
         self.edit_sgframe.setText(str(cfg.get("SGframe", 7)))
         self.edit_mawin.setText(str(cfg.get("MAWindow", 5)))
         self.edit_medk.setText(str(cfg.get("MedianKernel", 5)))
+        self.chk_truncate2.setChecked(bool(cfg.get("Truncate2Enabled", False)))
+        self.edit_start2.setText(str(cfg.get("Start2", 900)))
+        self.edit_stop2.setText(str(cfg.get("Stop2", 1700)))
         self._update_denoise_visibility()
+        self._update_truncate2_visibility()
         self.config_modified = False
 
     def _log(self, message: str, level: str = "info"):
@@ -787,9 +866,21 @@ class BatchPMeanUI(QMainWindow):
         is_renishaw = self._is_renishaw_system()
 
         if is_renishaw:
-            # Renishaw doesn't need WL correction or calibration files
-            self.cached_wl_corr = None
+            # Renishaw doesn't need calibration file; WL correction is optional
             self.cached_wvn = None
+            if self.wlcorr_file:
+                try:
+                    wl_df = rdata.read_txt_file(self.wlcorr_file)
+                    if wl_df is not None:
+                        self.cached_wl_corr = (wl_df.to_numpy() if hasattr(wl_df, "to_numpy")
+                                               else np.asarray(wl_df)).astype(np.float64)
+                    else:
+                        self.cached_wl_corr = None
+                except Exception as e:
+                    self._log(f"WL correction load failed: {e} — skipping SRC.", "warning")
+                    self.cached_wl_corr = None
+            else:
+                self.cached_wl_corr = None
             return True
 
         # Non-Renishaw: require both files

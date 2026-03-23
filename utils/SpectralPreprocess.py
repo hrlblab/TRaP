@@ -44,7 +44,13 @@ def Truncate(start, stop, wvnFull, sprSpect):
 #     return binSpect, newWvn
 
 def Binning(start, stop, wvn, truncSpect, binwidth=3.5):
-    binWvn = np.arange(start, stop, binwidth, dtype=np.float64)
+    # For integer bin widths, shift grid so midpoints land on whole wavenumbers
+    # e.g. binwidth=1, start=2900.4 → grid [2899.5,2900.5,...] → midpoints [2900,2901,...]
+    if binwidth == int(binwidth):
+        grid_start = round(start) - binwidth / 2.0
+    else:
+        grid_start = start
+    binWvn = np.arange(grid_start, stop + binwidth, binwidth, dtype=np.float64)
     newWvn = (binWvn[:-1] + binWvn[1:]) / 2.0
     binSpect = np.zeros(len(newWvn), dtype=np.float64)
     for k in range(len(newWvn)):
@@ -54,14 +60,17 @@ def Binning(start, stop, wvn, truncSpect, binwidth=3.5):
             binSpect[k] = np.mean(truncSpect[currBinI]).astype(np.float64)
         else:
             binSpect[k] = np.nan
-    return binSpect, newWvn
+    # Remove bins with no data (can occur at edges when grid is shifted)
+    valid = ~np.isnan(binSpect)
+    return binSpect[valid], newWvn[valid]
 
 def Denoise(binSpect, SGorder=2, SGframe=7):
     spect = savgol_filter(binSpect.astype(np.float64), SGframe, SGorder)
     return spect.astype(np.float64)
 
-def FluorescenceBackgroundSubtraction(spect, polyorder, max_iter=50):
-    base = baselinePolynomialFit(spect.astype(np.float64), polyorder, max_iter=max_iter)
+def FluorescenceBackgroundSubtraction(spect, polyorder, max_iter=50, exclude_mask=None):
+    base = baselinePolynomialFit(spect.astype(np.float64), polyorder, max_iter=max_iter,
+                                  exclude_mask=exclude_mask)
     finalSpect = spect.astype(np.float64) - base
     return base.astype(np.float64), finalSpect.astype(np.float64)
 
@@ -113,9 +122,12 @@ def manual_polyval(coeffs, x):
     return result
 
 
-def baselinePolynomialFit(y, degree, max_iter=50):
+def baselinePolynomialFit(y, degree, max_iter=50, exclude_mask=None):
     x = np.arange(len(y))
     data = y.copy().astype(np.float64)  # Ensure double precision
+    y_orig = y.astype(np.float64)
+    if exclude_mask is None:
+        exclude_mask = np.zeros(len(y), dtype=bool)
     oldL = np.float64(1_000_000)
     newL = np.float64(999_999)
     xn = [np.float64(1_000_000)]
@@ -125,6 +137,9 @@ def baselinePolynomialFit(y, degree, max_iter=50):
         oldL = newL
         _, _, fitdata = curfit3(data, degree)
         tempdata = np.minimum(fitdata, data)
+        # Excluded regions are frozen at original values so they don't
+        # drag the polynomial baseline into Raman peak regions
+        tempdata[exclude_mask] = y_orig[exclude_mask]
         index = (fitdata != tempdata).astype(int)
         xn.append(np.sum(index))
         if count < len(xn):
