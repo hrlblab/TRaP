@@ -775,7 +775,11 @@ class SystemSelectWizard(QWidget):
             animate_step_change(self)
             return
 
-        dlg = SRCF_UI(self)
+        try:
+            laser_wl = float(self.config.params.get("Exc Wavelength", 785))
+        except (TypeError, ValueError):
+            laser_wl = 785.0
+        dlg = SRCF_UI(self, laser_wavelength=laser_wl)
         dlg.exec_()
 
         # Check result after dialog closes

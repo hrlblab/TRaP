@@ -48,7 +48,7 @@ from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
 class SRCF_UI(QDialog):
     """Spectral Response Correction Factor Dialog with full workflow."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, laser_wavelength=None):
         super().__init__(parent)
         self.setWindowTitle("Spectral Response Correction Factor")
         # Enable minimize and maximize buttons
@@ -68,7 +68,7 @@ class SRCF_UI(QDialog):
         # ============ Data and State ============
         self.result = None
         self.wvn = None  # Wavenumber array from calibration
-        self.laser_wavelength = 785.0  # Default, overwritten from calibration file
+        self.laser_wavelength = float(laser_wavelength) if laser_wavelength is not None else 785.0
         self.corr = None  # Correction factor array
         self.mode = "WL"  # "WL", "NIST", "EXIST"
 
@@ -165,6 +165,7 @@ class SRCF_UI(QDialog):
         self.calib_group = QGroupBox("Step 2: X-Axis Calibration")
         calib_layout = QVBoxLayout(self.calib_group)
 
+        # Option A: .mat calibration file (non-Renishaw)
         calib_row = QHBoxLayout()
         self.btn_load_calib = QPushButton("Load Calibration (.mat)")
         self.btn_load_calib.clicked.connect(self._load_calibration)
@@ -174,6 +175,30 @@ class SRCF_UI(QDialog):
         calib_row.addWidget(self.lbl_calib_status)
         calib_row.addStretch()
         calib_layout.addLayout(calib_row)
+
+        # Option B: Renishaw spectrum file (extracts wvn from col 0)
+        renishaw_row = QHBoxLayout()
+        self.btn_load_renishaw = QPushButton("Load Renishaw Spectrum (.txt)")
+        self.btn_load_renishaw.clicked.connect(self._load_renishaw_wvn)
+        self.lbl_renishaw_status = QLabel("(Renishaw: load any spectrum to extract wavenumber axis)")
+        self.lbl_renishaw_status.setStyleSheet("color: #888;")
+        renishaw_row.addWidget(self.btn_load_renishaw)
+        renishaw_row.addWidget(self.lbl_renishaw_status)
+        renishaw_row.addStretch()
+        calib_layout.addLayout(renishaw_row)
+
+        # Laser wavelength input (always visible, editable)
+        wl_row = QHBoxLayout()
+        wl_row.addWidget(QLabel("Laser Wavelength (nm):"))
+        self.spin_laser_wl = QDoubleSpinBox()
+        self.spin_laser_wl.setRange(400, 1200)
+        self.spin_laser_wl.setDecimals(1)
+        self.spin_laser_wl.setValue(self.laser_wavelength)
+        self.spin_laser_wl.valueChanged.connect(lambda v: setattr(self, 'laser_wavelength', v))
+        wl_row.addWidget(self.spin_laser_wl)
+        wl_row.addStretch()
+        calib_layout.addLayout(wl_row)
+
         left_layout.addWidget(self.calib_group)
 
         # ---------- Step 3: Method Inputs ----------
@@ -514,6 +539,29 @@ class SRCF_UI(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
             return False
+
+    def _load_renishaw_wvn(self):
+        """Load wavenumber axis from a Renishaw 2-column spectrum file (col 0 = wvn)."""
+        fp, _ = QFileDialog.getOpenFileName(
+            self, "Select Renishaw Spectrum File",
+            "", "Data Files (*.txt *.csv);;All Files (*)"
+        )
+        if not fp:
+            return
+        try:
+            data = read_2col_file(fp)
+            wvn = data[:, 0].astype(float)
+            if wvn[0] > wvn[-1]:
+                wvn = wvn[::-1]
+            self.wvn = wvn
+            self.result = "WvnUploaded"
+            self.lbl_renishaw_status.setText(f"✓ Loaded ({len(self.wvn)} points)")
+            self.lbl_renishaw_status.setStyleSheet("color: #28a745;")
+            self.status_bar.showMessage(
+                f"Renishaw wvn loaded: {len(self.wvn)} points, laser {self.laser_wavelength:.1f} nm"
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
 
     def _load_wl_measured(self):
         """Load measured White-Light spectrum."""
