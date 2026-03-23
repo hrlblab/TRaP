@@ -779,7 +779,8 @@ class SystemSelectWizard(QWidget):
             laser_wl = float(self.config.params.get("Exc Wavelength", 785))
         except (TypeError, ValueError):
             laser_wl = 785.0
-        dlg = SRCF_UI(self, laser_wavelength=laser_wl)
+        is_renishaw = self.config.params.get("System") == "Renishaw"
+        dlg = SRCF_UI(self, laser_wavelength=laser_wl, is_renishaw=is_renishaw)
         dlg.exec_()
 
         # Check result after dialog closes

@@ -48,7 +48,7 @@ from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
 class SRCF_UI(QDialog):
     """Spectral Response Correction Factor Dialog with full workflow."""
 
-    def __init__(self, parent=None, laser_wavelength=None):
+    def __init__(self, parent=None, laser_wavelength=None, is_renishaw=False):
         super().__init__(parent)
         self.setWindowTitle("Spectral Response Correction Factor")
         # Enable minimize and maximize buttons
@@ -69,6 +69,7 @@ class SRCF_UI(QDialog):
         self.result = None
         self.wvn = None  # Wavenumber array from calibration
         self.laser_wavelength = float(laser_wavelength) if laser_wavelength is not None else 785.0
+        self.is_renishaw = is_renishaw
         self.corr = None  # Correction factor array
         self.mode = "WL"  # "WL", "NIST", "EXIST"
 
@@ -161,11 +162,10 @@ class SRCF_UI(QDialog):
         method_layout.addStretch()
         left_layout.addWidget(method_group)
 
-        # ---------- Step 2: Calibration (for WL and NIST) ----------
+        # ---------- Step 2: Calibration (for WL and NIST, non-Renishaw only) ----------
         self.calib_group = QGroupBox("Step 2: X-Axis Calibration")
         calib_layout = QVBoxLayout(self.calib_group)
 
-        # Option A: .mat calibration file (non-Renishaw)
         calib_row = QHBoxLayout()
         self.btn_load_calib = QPushButton("Load Calibration (.mat)")
         self.btn_load_calib.clicked.connect(self._load_calibration)
@@ -175,31 +175,23 @@ class SRCF_UI(QDialog):
         calib_row.addWidget(self.lbl_calib_status)
         calib_row.addStretch()
         calib_layout.addLayout(calib_row)
+        left_layout.addWidget(self.calib_group)
 
-        # Option B: Renishaw spectrum file (extracts wvn from col 0)
-        renishaw_row = QHBoxLayout()
-        self.btn_load_renishaw = QPushButton("Load Renishaw Spectrum (.txt)")
-        self.btn_load_renishaw.clicked.connect(self._load_renishaw_wvn)
-        self.lbl_renishaw_status = QLabel("(Renishaw: load any spectrum to extract wavenumber axis)")
-        self.lbl_renishaw_status.setStyleSheet("color: #888;")
-        renishaw_row.addWidget(self.btn_load_renishaw)
-        renishaw_row.addWidget(self.lbl_renishaw_status)
-        renishaw_row.addStretch()
-        calib_layout.addLayout(renishaw_row)
-
-        # Laser wavelength input (always visible, editable)
-        wl_row = QHBoxLayout()
-        wl_row.addWidget(QLabel("Laser Wavelength (nm):"))
+        # ---------- Step 2 (Renishaw): Laser Wavelength only ----------
+        self.renishaw_wl_group = QGroupBox("Step 2: Laser Wavelength")
+        renishaw_wl_layout = QHBoxLayout(self.renishaw_wl_group)
+        renishaw_wl_layout.addWidget(QLabel("Laser Wavelength (nm):"))
         self.spin_laser_wl = QDoubleSpinBox()
         self.spin_laser_wl.setRange(400, 1200)
         self.spin_laser_wl.setDecimals(1)
         self.spin_laser_wl.setValue(self.laser_wavelength)
         self.spin_laser_wl.valueChanged.connect(lambda v: setattr(self, 'laser_wavelength', v))
-        wl_row.addWidget(self.spin_laser_wl)
-        wl_row.addStretch()
-        calib_layout.addLayout(wl_row)
-
-        left_layout.addWidget(self.calib_group)
+        renishaw_wl_layout.addWidget(self.spin_laser_wl)
+        lbl_renishaw_note = QLabel("(wavenumber axis auto-extracted from spectrum file)")
+        lbl_renishaw_note.setStyleSheet("color: #888; font-style: italic;")
+        renishaw_wl_layout.addWidget(lbl_renishaw_note)
+        renishaw_wl_layout.addStretch()
+        left_layout.addWidget(self.renishaw_wl_group)
 
         # ---------- Step 3: Method Inputs ----------
         self.inputs_group = QGroupBox("Step 3: Method Inputs")
@@ -482,8 +474,11 @@ class SRCF_UI(QDialog):
         """Update UI visibility based on selected method."""
         index = self.combo_method.currentIndex()
 
-        # Show/hide calibration group (for WL and NIST, not for Load Existing)
-        self.calib_group.setVisible(index in [0, 1])
+        # Renishaw: hide .mat calibration, show laser wavelength only
+        # Non-Renishaw: show .mat calibration, hide laser wavelength group
+        needs_calib = index in [0, 1]
+        self.calib_group.setVisible(needs_calib and not self.is_renishaw)
+        self.renishaw_wl_group.setVisible(needs_calib and self.is_renishaw)
 
         # Show/hide input widgets
         self.wl_inputs_widget.setVisible(index == 0)
@@ -540,29 +535,6 @@ class SRCF_UI(QDialog):
             QMessageBox.critical(self, "Error", str(e))
             return False
 
-    def _load_renishaw_wvn(self):
-        """Load wavenumber axis from a Renishaw 2-column spectrum file (col 0 = wvn)."""
-        fp, _ = QFileDialog.getOpenFileName(
-            self, "Select Renishaw Spectrum File",
-            "", "Data Files (*.txt *.csv);;All Files (*)"
-        )
-        if not fp:
-            return
-        try:
-            data = read_2col_file(fp)
-            wvn = data[:, 0].astype(float)
-            if wvn[0] > wvn[-1]:
-                wvn = wvn[::-1]
-            self.wvn = wvn
-            self.result = "WvnUploaded"
-            self.lbl_renishaw_status.setText(f"✓ Loaded ({len(self.wvn)} points)")
-            self.lbl_renishaw_status.setStyleSheet("color: #28a745;")
-            self.status_bar.showMessage(
-                f"Renishaw wvn loaded: {len(self.wvn)} points, laser {self.laser_wavelength:.1f} nm"
-            )
-        except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
-
     def _load_wl_measured(self):
         """Load measured White-Light spectrum."""
         fp, _ = QFileDialog.getOpenFileName(
@@ -573,7 +545,16 @@ class SRCF_UI(QDialog):
             return
 
         try:
-            self.wl_measured_data = read_vector_file(fp)
+            if self.is_renishaw:
+                data = read_2col_file(fp)
+                wvn = data[:, 0].astype(float)
+                if wvn[0] > wvn[-1]:
+                    wvn = wvn[::-1]
+                    data = data[::-1]
+                self.wvn = wvn
+                self.wl_measured_data = data[:, 1].astype(float)
+            else:
+                self.wl_measured_data = read_vector_file(fp)
             self.file_wl_measured = fp
             self.lbl_wl_measured.setText(f"✓ Loaded ({len(self.wl_measured_data)} pts)")
             self.lbl_wl_measured.setStyleSheet("color: #28a745;")
@@ -609,7 +590,16 @@ class SRCF_UI(QDialog):
             return
 
         try:
-            self.srm_data = read_vector_file(fp)
+            if self.is_renishaw:
+                data = read_2col_file(fp)
+                wvn = data[:, 0].astype(float)
+                if wvn[0] > wvn[-1]:
+                    wvn = wvn[::-1]
+                    data = data[::-1]
+                self.wvn = wvn
+                self.srm_data = data[:, 1].astype(float)
+            else:
+                self.srm_data = read_vector_file(fp)
             self.file_srm_measured = fp
             self.lbl_srm.setText(f"✓ Loaded ({len(self.srm_data)} pts)")
             self.lbl_srm.setStyleSheet("color: #28a745;")
