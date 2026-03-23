@@ -46,8 +46,7 @@ jobs:
 
       - name: Zip .app for upload
         run: |
-          cd dist
-          zip -r TRaP-macOS.zip TRaP.app
+          ditto -c -k --keepParent dist/TRaP.app dist/TRaP-macOS.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
