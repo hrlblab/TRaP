@@ -56,23 +56,21 @@ def build_with_pyinstaller():
         if os.path.exists(folder):
             shutil.rmtree(folder)
 
+    # Path separator: ';' on Windows, ':' on macOS/Linux
+    S = ";" if sys.platform == "win32" else ":"
+
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onedir",
         "--windowed",
         "--name", "TRaP",
         "--icon", "vanderbilt_biophotonics_center_logo.jpg",
-        # Runtime hook: registers _internal/ as a DLL search directory
-        # before any imports — required for PyInstaller 6.x + conda PyQt5
-        "--runtime-hook", "pyi_rthook.py",
-        # Search paths for dependency analysis
-        "--paths", CONDA_LIB_BIN,
         # Data files
-        "--add-data", "config.json;.",
-        "--add-data", "configs;configs",
-        "--add-data", "resources;resources",
-        "--add-data", "data;data",
-        "--add-data", "vanderbilt_biophotonics_center_logo.jpg;.",
+        "--add-data", f"config.json{S}.",
+        "--add-data", f"configs{S}configs",
+        "--add-data", f"resources{S}resources",
+        "--add-data", f"data{S}data",
+        "--add-data", f"vanderbilt_biophotonics_center_logo.jpg{S}.",
         # Hidden imports
         "--hidden-import", "PyQt5.sip",
         "--hidden-import", "PyQt5.QtCore",
@@ -113,9 +111,11 @@ def build_with_pyinstaller():
         "TRaP_GUI.py"
     ]
 
-    # Append conda Qt DLL binaries (fixes DLL load errors on machines
-    # without a full conda install)
-    cmd += get_conda_qt_binaries()
+    # Windows-only: runtime hook + conda Qt DLLs
+    if sys.platform == "win32":
+        cmd += ["--runtime-hook", "pyi_rthook.py"]
+        cmd += ["--paths", CONDA_LIB_BIN]
+        cmd += get_conda_qt_binaries()
 
     print("Running command:")
     print(" ".join(cmd))
@@ -126,7 +126,12 @@ def build_with_pyinstaller():
     print()
     print("=" * 50)
     print("Build complete!")
-    print(f"Output: {os.path.join(SCRIPT_DIR, 'dist', 'TRaP', 'TRaP.exe')}")
+    if sys.platform == "win32":
+        print(f"Output: {os.path.join(SCRIPT_DIR, 'dist', 'TRaP', 'TRaP.exe')}")
+    elif sys.platform == "darwin":
+        print(f"Output: {os.path.join(SCRIPT_DIR, 'dist', 'TRaP.app')}")
+    else:
+        print(f"Output: {os.path.join(SCRIPT_DIR, 'dist', 'TRaP', 'TRaP')}")
     print("=" * 50)
 
 
