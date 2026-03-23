@@ -66,10 +66,8 @@ def build_with_pyinstaller():
         "--name", "TRaP",
         "--icon", "vanderbilt_biophotonics_center_logo.jpg",
         # Data files
-        "--add-data", f"config.json{S}.",
         "--add-data", f"configs{S}configs",
         "--add-data", f"resources{S}resources",
-        "--add-data", f"data{S}data",
         "--add-data", f"vanderbilt_biophotonics_center_logo.jpg{S}.",
         # Hidden imports
         "--hidden-import", "PyQt5.sip",
