@@ -137,9 +137,11 @@ def baselinePolynomialFit(y, degree, max_iter=50, exclude_mask=None):
         oldL = newL
         _, _, fitdata = curfit3(data, degree)
         tempdata = np.minimum(fitdata, data)
-        # Excluded regions are frozen at original values so they don't
-        # drag the polynomial baseline into Raman peak regions
-        tempdata[exclude_mask] = y_orig[exclude_mask]
+        # Excluded regions are set to the current polynomial value so they
+        # neither pull the baseline up (original peaks) nor down (min operation).
+        # This makes excluded points neutral — the polynomial is driven entirely
+        # by the non-excluded background regions.
+        tempdata[exclude_mask] = fitdata[exclude_mask]
         index = (fitdata != tempdata).astype(int)
         xn.append(np.sum(index))
         if count < len(xn):
