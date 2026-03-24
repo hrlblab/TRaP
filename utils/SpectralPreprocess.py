@@ -123,25 +123,39 @@ def manual_polyval(coeffs, x):
 
 
 def baselinePolynomialFit(y, degree, max_iter=50, exclude_mask=None):
-    x = np.arange(len(y))
-    data = y.copy().astype(np.float64)  # Ensure double precision
-    y_orig = y.astype(np.float64)
+    data = y.copy().astype(np.float64)
     if exclude_mask is None:
         exclude_mask = np.zeros(len(y), dtype=bool)
+    include_mask = ~exclude_mask
+    x_all = np.arange(1, len(data) + 1, dtype=np.float64)
+
     oldL = np.float64(1_000_000)
     newL = np.float64(999_999)
     xn = [np.float64(1_000_000)]
     samevalue = 0
     count = 1
+
     while newL > 1 and newL <= oldL and samevalue < max_iter:
         oldL = newL
-        _, _, fitdata = curfit3(data, degree)
+
+        if include_mask.any():
+            # Fit polynomial ONLY to non-excluded points, then evaluate everywhere.
+            # This prevents peak regions from distorting the baseline fit.
+            x_fit = x_all[include_mask]
+            d_fit = data[include_mask]
+            try:
+                coeffs, _ = curve_fit(polynomial_model, x_fit, d_fit,
+                                      p0=np.ones(degree + 1, dtype=np.float64))
+                fitdata = polynomial_model(x_all, *coeffs)
+            except Exception:
+                _, _, fitdata = curfit3(data, degree)
+        else:
+            _, _, fitdata = curfit3(data, degree)
+
         tempdata = np.minimum(fitdata, data)
-        # Excluded regions are set to the current polynomial value so they
-        # neither pull the baseline up (original peaks) nor down (min operation).
-        # This makes excluded points neutral — the polynomial is driven entirely
-        # by the non-excluded background regions.
+        # Excluded regions: use polynomial value directly (bypass min operation).
         tempdata[exclude_mask] = fitdata[exclude_mask]
+
         index = (fitdata != tempdata).astype(int)
         xn.append(np.sum(index))
         if count < len(xn):
@@ -154,7 +168,6 @@ def baselinePolynomialFit(y, degree, max_iter=50, exclude_mask=None):
 
         data = tempdata.copy()
         count += 1
-
 
     # while newL > 1 and newL <= oldL and samevalue < 50:
     #     oldL = newL
