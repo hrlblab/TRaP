@@ -291,7 +291,12 @@ class BatchWorker(QThread):
             self.progress.emit(i + 1, total, os.path.basename(path))
 
             try:
-                data_df = rdata.load_spectrum_data(path)
+                if self.is_renishaw:
+                    data_df = rdata.read_txt_file(path)
+                else:
+                    data_df = rdata.load_spectrum_data(path)
+                if data_df is None:
+                    raise ValueError(f"Failed to read file: {path}")
                 if hasattr(data_df, "to_numpy"):
                     arr = data_df.to_numpy()
                 else:
@@ -1009,7 +1014,9 @@ class BatchPMeanUI(QMainWindow):
 
         try:
             path = self.data_files[0]
-            data_df = rdata.load_spectrum_data(path)
+            data_df = rdata.read_txt_file(path) if is_renishaw else rdata.load_spectrum_data(path)
+            if data_df is None:
+                raise ValueError(f"Failed to read file: {path}")
             if hasattr(data_df, "to_numpy"):
                 arr = data_df.to_numpy()
             else:
