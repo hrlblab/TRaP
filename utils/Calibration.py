@@ -32,7 +32,7 @@ class SpectrumCalibration:
         ])
         self.acetaminophen_library = np.array([
             3326.6, 3102.4, 3064.6, 2931.1, 1648.4, 1561.5, 1371.5, 1323.9,
-            1278.5, 1236.8, 1168.5, 1105.5, 968.7, 857.9, 834.5, 797.2, 710.8,
+            1278.5, 1236.8, 1168.5, 1105.5, 968.7, 857.9, 834.5, 797.2, 710.8,  
             651.6, 465.1, 390.9, 329.2, 213.3
         ])
         # Reference library for Naphthalene (used in Fingerprint mode)
@@ -42,7 +42,7 @@ class SpectrumCalibration:
         ])
         # Expected number of peaks for interactive selection
         self.near_num = 7  # Neon‐Argon
-        self.acet_num = 4  # Acetaminophen
+        self.acet_num = 4  # Acetaminophen  
         self.w2 = 4
 
         # Matching indices

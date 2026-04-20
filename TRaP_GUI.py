@@ -33,8 +33,8 @@ def main():
     # Create QApplication FIRST so QMessageBox is safe to use
     app = QApplication(sys.argv)
 
-    # Apply modern dark theme
-    apply_modern_style(app)
+    # Apply modern dark theme (default)
+    apply_modern_style(app, theme="dark")
 
     # Single instance guard with QSharedMemory
     shared_mem = QSharedMemory(APP_ID)

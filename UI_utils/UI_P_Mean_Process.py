@@ -32,7 +32,8 @@ from matplotlib.figure import Figure
 from scipy.signal import medfilt
 
 from UI_utils.UI_Config_Manager_v2 import ConfigManager
-from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
+from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
+def _C(): return get_current_colors()
 from utils.SpectralPreprocess import (
     Binning, Denoise, Truncate, CosmicRayRemoval,
     SpectralResponseCorrection, subtractBaseline,
@@ -60,7 +61,7 @@ class DualPlotCanvas(FigureCanvas):
 
     def __init__(self, parent=None, width=10, height=8, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
-        self.fig.set_facecolor(Colors.BG_SECONDARY)
+        self.fig.set_facecolor(_C().BG_SECONDARY)
 
         # Create subplots
         self.ax_current = self.fig.add_subplot(211)
@@ -109,14 +110,14 @@ class DualPlotCanvas(FigureCanvas):
         """Apply consistent dark theme styling to axes."""
         fs_title, fs_label, fs_tick, _ = self._font_sizes()
         for ax in [self.ax_current, self.ax_compare]:
-            ax.set_facecolor(Colors.BG_TERTIARY)
-            ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-            ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
+            ax.set_facecolor(_C().BG_TERTIARY)
+            ax.grid(True, alpha=0.2, linestyle='--', color=_C().BORDER)
+            ax.tick_params(labelsize=fs_tick, colors=_C().TEXT_SECONDARY)
             for spine in ax.spines.values():
-                spine.set_color(Colors.BORDER)
+                spine.set_color(_C().BORDER)
 
-        self.ax_current.set_title("Current Spectrum", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_compare.set_title("Processing Comparison", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+        self.ax_current.set_title("Current Spectrum", fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
+        self.ax_compare.set_title("Processing Comparison", fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
         self.fig.tight_layout(pad=2.0)
 
     def resizeEvent(self, event):
@@ -138,25 +139,25 @@ class DualPlotCanvas(FigureCanvas):
     def _apply_ax_style(self, ax):
         """Apply dark theme styling to an axis."""
         _, _, fs_tick, _ = self._font_sizes()
-        ax.set_facecolor(Colors.BG_TERTIARY)
-        ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-        ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
+        ax.set_facecolor(_C().BG_TERTIARY)
+        ax.grid(True, alpha=0.2, linestyle='--', color=_C().BORDER)
+        ax.tick_params(labelsize=fs_tick, colors=_C().TEXT_SECONDARY)
         for spine in ax.spines.values():
-            spine.set_color(Colors.BORDER)
+            spine.set_color(_C().BORDER)
 
     def _add_crosshair(self, ax):
         """Add invisible crosshair elements to an axis. Returns (vline, annot, dot)."""
-        vline = ax.axvline(x=0, color='#888888', linewidth=0.8,
+        vline = ax.axvline(x=0, color=_C().TEXT_TERTIARY, linewidth=0.8,
                            linestyle='--', alpha=0.6, visible=False)
         annot = ax.annotate(
             '', xy=(0, 0), xytext=(12, 12),
             textcoords='offset points',
             ha='left', va='bottom',
             fontsize=8,
-            color=Colors.TEXT_PRIMARY,
+            color=_C().TEXT_PRIMARY,
             bbox=dict(boxstyle='round,pad=0.4',
-                      facecolor=Colors.BG_DARK,
-                      edgecolor=Colors.BORDER,
+                      facecolor=_C().BG_DARK,
+                      edgecolor=_C().BORDER,
                       alpha=0.88),
             visible=False
         )
@@ -232,15 +233,15 @@ class DualPlotCanvas(FigureCanvas):
         self.ax_current.clear()
         self._apply_ax_style(self.ax_current)
         if wvn is not None and len(wvn) == len(spect):
-            self.ax_current.plot(wvn, spect, color=Colors.PRIMARY, linewidth=1.5, label='Current')
-            self.ax_current.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+            self.ax_current.plot(wvn, spect, color=_C().PRIMARY, linewidth=1.5, label='Current')
+            self.ax_current.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=_C().TEXT_SECONDARY)
         else:
-            self.ax_current.plot(spect, color=Colors.PRIMARY, linewidth=1.5, label='Current')
-            self.ax_current.set_xlabel("Index", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+            self.ax_current.plot(spect, color=_C().PRIMARY, linewidth=1.5, label='Current')
+            self.ax_current.set_xlabel("Index", fontsize=fs_label, color=_C().TEXT_SECONDARY)
 
-        self.ax_current.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
-        self.ax_current.set_title(title or "Current Spectrum", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_current.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        self.ax_current.set_ylabel("Intensity", fontsize=fs_label, color=_C().TEXT_SECONDARY)
+        self.ax_current.set_title(title or "Current Spectrum", fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
+        self.ax_current.legend(loc='best', fontsize=fs_legend, facecolor=_C().BG_TERTIARY, edgecolor=_C().BORDER, labelcolor=_C().TEXT_PRIMARY)
         if wvn is not None and len(wvn) == len(spect):
             self._data_current = (np.asarray(wvn), np.asarray(spect))
         else:
@@ -260,19 +261,19 @@ class DualPlotCanvas(FigureCanvas):
         if wvn is not None and len(wvn) == len(before):
             self.ax_compare.plot(wvn, before, color="#5B9BD5", linewidth=1.2, alpha=0.8, label=before_label)
             if after is not None and len(after) == len(wvn):
-                self.ax_compare.plot(wvn, after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
+                self.ax_compare.plot(wvn, after, color=_C().SUCCESS, linewidth=1.5, label=after_label)
             elif after is not None and wvn_after is not None:
-                self.ax_compare.plot(wvn_after, after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
-            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+                self.ax_compare.plot(wvn_after, after, color=_C().SUCCESS, linewidth=1.5, label=after_label)
+            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=_C().TEXT_SECONDARY)
         else:
             self.ax_compare.plot(before, color="#5B9BD5", linewidth=1.2, alpha=0.8, label=before_label)
             if after is not None:
-                self.ax_compare.plot(after, color=Colors.SUCCESS, linewidth=1.5, label=after_label)
-            self.ax_compare.set_xlabel("Index", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+                self.ax_compare.plot(after, color=_C().SUCCESS, linewidth=1.5, label=after_label)
+            self.ax_compare.set_xlabel("Index", fontsize=fs_label, color=_C().TEXT_SECONDARY)
 
-        self.ax_compare.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
-        self.ax_compare.set_title("Processing Comparison", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_compare.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        self.ax_compare.set_ylabel("Intensity", fontsize=fs_label, color=_C().TEXT_SECONDARY)
+        self.ax_compare.set_title("Processing Comparison", fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
+        self.ax_compare.legend(loc='best', fontsize=fs_legend, facecolor=_C().BG_TERTIARY, edgecolor=_C().BORDER, labelcolor=_C().TEXT_PRIMARY)
         snap_spect = after if (after is not None and wvn is not None and len(after) == len(wvn)) else before
         if wvn is not None and len(wvn) == len(snap_spect):
             self._data_compare = (np.asarray(wvn), np.asarray(snap_spect))
@@ -291,20 +292,20 @@ class DualPlotCanvas(FigureCanvas):
         self._apply_ax_style(self.ax_compare)
 
         if wvn is not None and len(wvn) == len(spect):
-            self.ax_compare.plot(wvn, spect, color=Colors.PRIMARY, linewidth=1.5, label='Spectrum')
-            self.ax_compare.plot(wvn, baseline, color=Colors.DANGER, linestyle='--', linewidth=1.8, label='Polyfit Baseline')
-            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+            self.ax_compare.plot(wvn, spect, color=_C().PRIMARY, linewidth=1.5, label='Spectrum')
+            self.ax_compare.plot(wvn, baseline, color=_C().DANGER, linestyle='--', linewidth=1.8, label='Polyfit Baseline')
+            self.ax_compare.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=_C().TEXT_SECONDARY)
         else:
-            self.ax_compare.plot(spect, color=Colors.PRIMARY, linewidth=1.5, label='Spectrum')
-            self.ax_compare.plot(baseline, color=Colors.DANGER, linestyle='--', linewidth=1.8, label='Polyfit Baseline')
-            self.ax_compare.set_xlabel("Index", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+            self.ax_compare.plot(spect, color=_C().PRIMARY, linewidth=1.5, label='Spectrum')
+            self.ax_compare.plot(baseline, color=_C().DANGER, linestyle='--', linewidth=1.8, label='Polyfit Baseline')
+            self.ax_compare.set_xlabel("Index", fontsize=fs_label, color=_C().TEXT_SECONDARY)
 
-        self.ax_compare.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
-        self.ax_compare.set_title("Polyfit Baseline Preview", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_compare.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        self.ax_compare.set_ylabel("Intensity", fontsize=fs_label, color=_C().TEXT_SECONDARY)
+        self.ax_compare.set_title("Polyfit Baseline Preview", fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
+        self.ax_compare.legend(loc='best', fontsize=fs_legend, facecolor=_C().BG_TERTIARY, edgecolor=_C().BORDER, labelcolor=_C().TEXT_PRIMARY)
         self.ax_compare.fill_between(
             wvn if wvn is not None and len(wvn) == len(spect) else range(len(spect)),
-            baseline, spect, alpha=0.2, color=Colors.SUCCESS, label='Background'
+            baseline, spect, alpha=0.2, color=_C().SUCCESS, label='Background'
         )
         if wvn is not None and len(wvn) == len(spect):
             self._data_compare = (np.asarray(wvn), np.asarray(spect))
@@ -366,41 +367,41 @@ class StepIndicator(QWidget):
             if i < self.current_index:
                 # Completed
                 frame.setStyleSheet(
-                    f"background-color: {Colors.SUCCESS}; border-radius: 6px; "
-                    f"border: 2px solid {Colors.SUCCESS};"
+                    f"background-color: {_C().SUCCESS}; border-radius: 6px; "
+                    f"border: 2px solid {_C().SUCCESS};"
                 )
                 label.setStyleSheet(
-                    f"color: {Colors.BG_DARK}; font-weight: bold; "
+                    f"color: {_C().BG_DARK}; font-weight: bold; "
                     f"font-size: {Fonts.SIZE_SM}px;"
                 )
             elif i == self.current_index:
                 # Current — highlighted
                 frame.setStyleSheet(
-                    f"background-color: {Colors.PRIMARY}; border-radius: 6px; "
+                    f"background-color: {_C().PRIMARY}; border-radius: 6px; "
                     f"border: 2px solid #79C0FF;"
                 )
                 label.setStyleSheet(
-                    f"color: {Colors.BG_DARK}; font-weight: bold; "
+                    f"color: {_C().BG_DARK}; font-weight: bold; "
                     f"font-size: {Fonts.SIZE_SM}px;"
                 )
             elif i == self.current_index + 1:
                 # Next step — slightly highlighted
                 frame.setStyleSheet(
-                    f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px; "
-                    f"border: 2px solid {Colors.PRIMARY};"
+                    f"background-color: {_C().BG_TERTIARY}; border-radius: 6px; "
+                    f"border: 2px solid {_C().PRIMARY};"
                 )
                 label.setStyleSheet(
-                    f"color: {Colors.TEXT_PRIMARY}; font-weight: bold; "
+                    f"color: {_C().TEXT_PRIMARY}; font-weight: bold; "
                     f"font-size: {Fonts.SIZE_SM}px;"
                 )
             else:
                 # Other pending
                 frame.setStyleSheet(
-                    f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px; "
-                    f"border: 1px solid {Colors.BORDER};"
+                    f"background-color: {_C().BG_TERTIARY}; border-radius: 6px; "
+                    f"border: 1px solid {_C().BORDER};"
                 )
                 label.setStyleSheet(
-                    f"color: {Colors.TEXT_TERTIARY}; "
+                    f"color: {_C().TEXT_TERTIARY}; "
                     f"font-size: {Fonts.SIZE_SM}px;"
                 )
 
@@ -424,7 +425,7 @@ class P_Mean_Process_UI(QMainWindow):
         self.resize(min(1400, int(screen.width() * 0.9)), min(900, int(screen.height() * 0.9)))
         self.move(screen.center() - self.rect().center())
         # Apply unified dark theme
-        self.setStyleSheet(get_stylesheet())
+        self.setStyleSheet(get_current_stylesheet())
 
         # Data state
         self.wvnFull = np.zeros([100, 1])
@@ -494,7 +495,7 @@ class P_Mean_Process_UI(QMainWindow):
 
         # Current step info
         self.lbl_step_info = QLabel("Step 0: Load Data")
-        self.lbl_step_info.setStyleSheet("font-size: 14px; font-weight: bold; color: #007bff; padding: 5px;")
+        self.lbl_step_info.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {_C().PRIMARY}; padding: 5px;")
         left_layout.addWidget(self.lbl_step_info)
 
         # ── Processing Parameters (grouped by pipeline step) ──────────────
@@ -502,7 +503,7 @@ class P_Mean_Process_UI(QMainWindow):
         params_outer = QVBoxLayout(params_group)
         params_outer.setSpacing(8)
 
-        STEP_STYLE = "color: #4C8BF5; font-size: 11px; font-weight: 600; padding: 2px 0 1px 0;"
+        STEP_STYLE = f"color: {_C().PRIMARY}; font-size: 11px; font-weight: 600; padding: 2px 0 1px 0;"
 
         def make_field(default, width=80):
             w = QLineEdit(default)
@@ -513,7 +514,7 @@ class P_Mean_Process_UI(QMainWindow):
         def add_step_header(layout, label):
             sep = QFrame()
             sep.setFrameShape(QFrame.HLine)
-            sep.setStyleSheet("color: #2a2a2a;")
+            sep.setStyleSheet(f"color: {_C().BORDER};")
             layout.addWidget(sep)
             lbl = QLabel(label)
             lbl.setStyleSheet(STEP_STYLE)
@@ -633,11 +634,11 @@ class P_Mean_Process_UI(QMainWindow):
         self.lbl_system_info = QLabel(system_text)
         self.lbl_system_info.setWordWrap(True)
         self.lbl_system_info.setStyleSheet(
-            f"color: {Colors.SUCCESS}; font-weight: bold; padding: 8px; "
-            f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px;"
+            f"color: {_C().SUCCESS}; font-weight: bold; padding: 8px; "
+            f"background-color: {_C().BG_TERTIARY}; border-radius: 6px;"
             if is_renishaw else
-            f"color: {Colors.PRIMARY}; font-weight: bold; padding: 8px; "
-            f"background-color: {Colors.BG_TERTIARY}; border-radius: 6px;"
+            f"color: {_C().PRIMARY}; font-weight: bold; padding: 8px; "
+            f"background-color: {_C().BG_TERTIARY}; border-radius: 6px;"
         )
         files_layout.addWidget(self.lbl_system_info)
 
@@ -649,7 +650,7 @@ class P_Mean_Process_UI(QMainWindow):
         self.btn_select_data.setMinimumWidth(160)
         data_layout.addWidget(self.btn_select_data)
         self.lbl_data_file = QLabel("Not selected")
-        self.lbl_data_file.setStyleSheet(f"color: {Colors.DANGER};")
+        self.lbl_data_file.setStyleSheet(f"color: {_C().DANGER};")
         self.lbl_data_file.setWordWrap(True)
         data_layout.addWidget(self.lbl_data_file, 1)
         files_layout.addLayout(data_layout)
@@ -664,7 +665,7 @@ class P_Mean_Process_UI(QMainWindow):
         self.btn_select_wlcorr.setMinimumWidth(160)
         wl_layout.addWidget(self.btn_select_wlcorr)
         self.lbl_wlcorr_file = QLabel("Not selected")
-        self.lbl_wlcorr_file.setStyleSheet(f"color: {Colors.DANGER};")
+        self.lbl_wlcorr_file.setStyleSheet(f"color: {_C().DANGER};")
         self.lbl_wlcorr_file.setWordWrap(True)
         wl_layout.addWidget(self.lbl_wlcorr_file, 1)
         files_layout.addWidget(self.wl_widget)
@@ -679,7 +680,7 @@ class P_Mean_Process_UI(QMainWindow):
         self.btn_select_cal.setMinimumWidth(160)
         cal_layout.addWidget(self.btn_select_cal)
         self.lbl_cal_file = QLabel("Not selected")
-        self.lbl_cal_file.setStyleSheet(f"color: {Colors.DANGER};")
+        self.lbl_cal_file.setStyleSheet(f"color: {_C().DANGER};")
         self.lbl_cal_file.setWordWrap(True)
         cal_layout.addWidget(self.lbl_cal_file, 1)
         files_layout.addWidget(self.cal_widget)
@@ -761,9 +762,9 @@ class P_Mean_Process_UI(QMainWindow):
         # Status bar
         self.lbl_status = QLabel("Ready. Load data files to begin processing.")
         self.lbl_status.setStyleSheet(
-            f"padding: 5px; background-color: {Colors.BG_TERTIARY}; "
-            f"color: {Colors.TEXT_SECONDARY}; border-radius: 3px; "
-            f"border: 1px solid {Colors.BORDER};"
+            f"padding: 5px; background-color: {_C().BG_TERTIARY}; "
+            f"color: {_C().TEXT_SECONDARY}; border-radius: 3px; "
+            f"border: 1px solid {_C().BORDER};"
         )
         right_layout.addWidget(self.lbl_status)
 
@@ -824,7 +825,7 @@ class P_Mean_Process_UI(QMainWindow):
             self.lbl_step_info.setText(f"Step {self.current_step_index}: {step_name}")
         else:
             self.lbl_step_info.setText("Processing Complete!")
-            self.lbl_step_info.setStyleSheet("font-size: 14px; font-weight: bold; color: #28a745; padding: 5px;")
+            self.lbl_step_info.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {_C().SUCCESS}; padding: 5px;")
 
     def _update_plots(self, show_comparison=True):
         """Update both plots."""
@@ -1218,7 +1219,7 @@ class P_Mean_Process_UI(QMainWindow):
         if file_path:
             self.data_file = file_path
             self.lbl_data_file.setText(os.path.basename(file_path))
-            self.lbl_data_file.setStyleSheet(f"color: {Colors.SUCCESS};")
+            self.lbl_data_file.setStyleSheet(f"color: {_C().SUCCESS};")
             self.lbl_status.setText(f"Data file selected: {os.path.basename(file_path)}")
 
     def on_select_wlcorr_file(self):
@@ -1230,7 +1231,7 @@ class P_Mean_Process_UI(QMainWindow):
         if file_path:
             self.wlcorr_file = file_path
             self.lbl_wlcorr_file.setText(os.path.basename(file_path))
-            self.lbl_wlcorr_file.setStyleSheet(f"color: {Colors.SUCCESS};")
+            self.lbl_wlcorr_file.setStyleSheet(f"color: {_C().SUCCESS};")
             self.lbl_status.setText(f"WL Correction file selected: {os.path.basename(file_path)}")
 
     def on_select_calibration_file(self):
@@ -1242,7 +1243,7 @@ class P_Mean_Process_UI(QMainWindow):
         if file_path:
             self.calibration_file = file_path
             self.lbl_cal_file.setText(os.path.basename(file_path))
-            self.lbl_cal_file.setStyleSheet(f"color: {Colors.SUCCESS};")
+            self.lbl_cal_file.setStyleSheet(f"color: {_C().SUCCESS};")
             self.lbl_status.setText(f"Calibration file selected: {os.path.basename(file_path)}")
 
     def on_load_rdata_files(self):

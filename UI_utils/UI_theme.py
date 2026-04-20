@@ -697,11 +697,291 @@ def get_stylesheet() -> str:
     """
 
 
-def apply_theme(app: QApplication):
-    """Apply the premium dark theme to the application."""
-    app.setStyleSheet(get_stylesheet())
+class LightColors:
+    """Light theme color palette."""
 
-    # Set application font
+    BG_DARK      = "#F5F7FA"
+    BG_SECONDARY = "#FFFFFF"
+    BG_TERTIARY  = "#EDF0F5"
+    BG_HOVER     = "#E2E8F0"
+    BG_ACTIVE    = "#2563EB20"
+
+    PRIMARY         = "#2563EB"
+    PRIMARY_HOVER   = "#1D4ED8"
+    PRIMARY_PRESSED = "#1E40AF"
+    PRIMARY_MUTED   = "#2563EB30"
+
+    SECONDARY       = "#7C3AED"
+    SECONDARY_HOVER = "#6D28D9"
+
+    SUCCESS      = "#16A34A"
+    SUCCESS_HOVER= "#15803D"
+    SUCCESS_BG   = "#16A34A20"
+
+    WARNING      = "#D97706"
+    WARNING_HOVER= "#B45309"
+    WARNING_BG   = "#D9770620"
+
+    DANGER       = "#DC2626"
+    DANGER_HOVER = "#B91C1C"
+    DANGER_BG    = "#DC262620"
+
+    TEXT_PRIMARY   = "#111827"
+    TEXT_SECONDARY = "#6B7280"
+    TEXT_TERTIARY  = "#9CA3AF"
+    TEXT_LINK      = "#2563EB"
+
+    BORDER       = "#D1D5DB"
+    BORDER_MUTED = "#E5E7EB"
+    BORDER_FOCUS = "#2563EB"
+
+    INFO    = "#2563EB"
+    INFO_BG = "#2563EB20"
+
+
+def get_light_stylesheet() -> str:
+    """Generate the complete application stylesheet for light mode."""
+    C = LightColors
+    return f"""
+    QWidget {{
+        font-family: {Fonts.FAMILY};
+        font-size: {Fonts.SIZE_BASE}px;
+        color: {C.TEXT_PRIMARY};
+        background-color: {C.BG_DARK};
+    }}
+    QMainWindow {{ background-color: {C.BG_DARK}; }}
+    QDialog     {{ background-color: {C.BG_DARK}; }}
+
+    QLabel {{
+        color: {C.TEXT_PRIMARY};
+        font-size: {Fonts.SIZE_BASE}px;
+        padding: 2px;
+    }}
+    QLabel[class="title"] {{
+        font-size: {Fonts.SIZE_XXXL}px; font-weight: 700; color: {C.TEXT_PRIMARY};
+    }}
+    QLabel[class="subtitle"] {{
+        font-size: {Fonts.SIZE_LG}px; font-weight: 500; color: {C.TEXT_SECONDARY};
+    }}
+    QLabel[class="section-title"] {{
+        font-size: {Fonts.SIZE_XL}px; font-weight: 600; color: {C.PRIMARY};
+    }}
+    QLabel[class="hint"] {{
+        font-size: {Fonts.SIZE_SM}px; color: {C.TEXT_TERTIARY}; font-style: italic;
+    }}
+    QLabel[class="status-success"] {{ color: {C.SUCCESS}; font-weight: 500; }}
+    QLabel[class="status-error"]   {{ color: {C.DANGER};  font-weight: 500; }}
+    QLabel[class="status-warning"] {{ color: {C.WARNING}; font-weight: 500; }}
+
+    QPushButton {{
+        font-size: {Fonts.SIZE_BASE}px; font-weight: 500;
+        padding: 8px 16px;
+        border: 1px solid {C.BORDER};
+        border-radius: 8px;
+        background-color: {C.BG_TERTIARY};
+        color: {C.TEXT_PRIMARY};
+        min-height: 20px; min-width: 80px;
+    }}
+    QPushButton:hover    {{ background-color: {C.BG_HOVER}; border-color: {C.TEXT_TERTIARY}; }}
+    QPushButton:pressed  {{ background-color: {C.BG_SECONDARY}; }}
+    QPushButton:disabled {{ background-color: {C.BG_SECONDARY}; color: {C.TEXT_TERTIARY}; border-color: {C.BORDER_MUTED}; }}
+    QPushButton:focus    {{ border-color: {C.BORDER_FOCUS}; outline: none; }}
+
+    QPushButton[class="primary"], QPushButton[cta="true"] {{
+        background-color: {C.PRIMARY}; color: #FFFFFF; border: none; font-weight: 600;
+    }}
+    QPushButton[class="primary"]:hover, QPushButton[cta="true"]:hover {{
+        background-color: {C.PRIMARY_HOVER};
+    }}
+    QPushButton[class="primary"]:pressed, QPushButton[cta="true"]:pressed {{
+        background-color: {C.PRIMARY_PRESSED};
+    }}
+    QPushButton[class="primary"]:disabled, QPushButton[cta="true"]:disabled {{
+        background-color: {C.PRIMARY_MUTED}; color: {C.TEXT_TERTIARY};
+    }}
+    QPushButton[class="success"] {{
+        background-color: {C.SUCCESS}; color: #FFFFFF; border: none; font-weight: 600;
+    }}
+    QPushButton[class="success"]:hover {{ background-color: {C.SUCCESS_HOVER}; }}
+    QPushButton[class="danger"]  {{
+        background-color: {C.DANGER}; color: #FFFFFF; border: none; font-weight: 600;
+    }}
+    QPushButton[class="danger"]:hover  {{ background-color: {C.DANGER_HOVER}; }}
+    QPushButton[class="secondary"], QPushButton[class="info"] {{
+        background-color: transparent; color: {C.PRIMARY}; border: 1px solid {C.PRIMARY};
+    }}
+    QPushButton[class="secondary"]:hover, QPushButton[class="info"]:hover {{
+        background-color: {C.PRIMARY_MUTED};
+    }}
+
+    QLineEdit {{
+        font-size: {Fonts.SIZE_BASE}px; padding: 10px 12px;
+        border: 1px solid {C.BORDER}; border-radius: 8px;
+        background-color: {C.BG_SECONDARY}; color: {C.TEXT_PRIMARY};
+        selection-background-color: {C.PRIMARY_MUTED}; min-height: 20px;
+    }}
+    QLineEdit:hover   {{ border-color: {C.TEXT_TERTIARY}; }}
+    QLineEdit:focus   {{ border-color: {C.BORDER_FOCUS}; background-color: {C.BG_TERTIARY}; }}
+    QLineEdit:disabled {{ background-color: {C.BG_DARK}; color: {C.TEXT_TERTIARY}; }}
+
+    QComboBox {{
+        font-size: {Fonts.SIZE_BASE}px; padding: 12px 16px;
+        border: 1px solid {C.BORDER}; border-radius: 8px;
+        background-color: {C.BG_SECONDARY}; color: {C.TEXT_PRIMARY}; min-height: 24px;
+    }}
+    QComboBox:hover {{ border-color: {C.TEXT_TERTIARY}; }}
+    QComboBox:focus {{ border-color: {C.BORDER_FOCUS}; }}
+    QComboBox::drop-down {{ border: none; width: 32px; padding-right: 8px; }}
+    QComboBox::down-arrow {{
+        image: none; border-left: 5px solid transparent; border-right: 5px solid transparent;
+        border-top: 6px solid {C.TEXT_SECONDARY}; margin-right: 8px;
+    }}
+    QComboBox QAbstractItemView {{
+        font-size: {Fonts.SIZE_BASE}px; background-color: {C.BG_SECONDARY};
+        border: 1px solid {C.BORDER}; border-radius: 8px; padding: 4px;
+        selection-background-color: {C.PRIMARY_MUTED}; selection-color: {C.TEXT_PRIMARY};
+    }}
+    QComboBox QAbstractItemView::item {{ padding: 10px 16px; border-radius: 4px; min-height: 28px; }}
+    QComboBox QAbstractItemView::item:hover {{ background-color: {C.BG_HOVER}; }}
+
+    QSpinBox, QDoubleSpinBox {{
+        font-size: {Fonts.SIZE_BASE}px; padding: 10px 12px;
+        border: 1px solid {C.BORDER}; border-radius: 8px;
+        background-color: {C.BG_SECONDARY}; color: {C.TEXT_PRIMARY};
+    }}
+    QSpinBox:hover, QDoubleSpinBox:hover {{ border-color: {C.TEXT_TERTIARY}; }}
+    QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {C.BORDER_FOCUS}; }}
+    QSpinBox::up-button, QDoubleSpinBox::up-button,
+    QSpinBox::down-button, QDoubleSpinBox::down-button {{
+        width: 24px; border: none; background-color: {C.BG_TERTIARY};
+    }}
+    QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+    QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {{
+        background-color: {C.BG_HOVER};
+    }}
+
+    QGroupBox {{
+        font-size: {Fonts.SIZE_MD}px; font-weight: 600;
+        border: 1px solid {C.BORDER}; border-radius: 12px;
+        margin-top: 20px; padding: 24px 16px 16px 16px;
+        background-color: {C.BG_SECONDARY};
+    }}
+    QGroupBox::title {{
+        subcontrol-origin: margin; left: 16px; top: 8px; padding: 0 12px;
+        color: {C.PRIMARY}; background-color: {C.BG_SECONDARY};
+    }}
+
+    QListWidget {{
+        font-size: {Fonts.SIZE_BASE}px; border: 1px solid {C.BORDER};
+        border-radius: 8px; background-color: {C.BG_SECONDARY}; padding: 8px; outline: none;
+    }}
+    QListWidget::item {{ padding: 12px 16px; border-radius: 6px; margin: 2px 0; color: {C.TEXT_PRIMARY}; }}
+    QListWidget::item:hover    {{ background-color: {C.BG_HOVER}; }}
+    QListWidget::item:selected {{ background-color: {C.PRIMARY_MUTED}; color: {C.PRIMARY}; }}
+
+    QTextEdit {{
+        font-size: {Fonts.SIZE_SM}px; font-family: {Fonts.FAMILY_MONO};
+        border: 1px solid {C.BORDER}; border-radius: 8px;
+        background-color: {C.BG_SECONDARY}; color: {C.TEXT_PRIMARY};
+        padding: 12px; selection-background-color: {C.PRIMARY_MUTED};
+    }}
+
+    QProgressBar {{
+        font-size: {Fonts.SIZE_SM}px; font-weight: 500;
+        border: none; border-radius: 8px; background-color: {C.BG_TERTIARY};
+        text-align: center; color: {C.TEXT_PRIMARY}; min-height: 24px;
+    }}
+    QProgressBar::chunk {{
+        background: qlineargradient(x1:0,y1:0,x2:1,y2:0,
+            stop:0 {C.PRIMARY_PRESSED}, stop:1 {C.PRIMARY});
+        border-radius: 8px;
+    }}
+
+    QScrollArea {{ border: none; background-color: transparent; }}
+    QScrollBar:vertical {{
+        width: 12px; background-color: {C.BG_SECONDARY}; border-radius: 6px; margin: 4px 2px;
+    }}
+    QScrollBar::handle:vertical {{
+        background-color: {C.BORDER}; border-radius: 5px; min-height: 40px;
+    }}
+    QScrollBar::handle:vertical:hover {{ background-color: {C.TEXT_TERTIARY}; }}
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; border: none; }}
+    QScrollBar:horizontal {{
+        height: 12px; background-color: {C.BG_SECONDARY}; border-radius: 6px; margin: 2px 4px;
+    }}
+    QScrollBar::handle:horizontal {{
+        background-color: {C.BORDER}; border-radius: 5px; min-width: 40px;
+    }}
+    QScrollBar::handle:horizontal:hover {{ background-color: {C.TEXT_TERTIARY}; }}
+    QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; border: none; }}
+
+    QCheckBox {{ font-size: {Fonts.SIZE_BASE}px; spacing: 12px; color: {C.TEXT_PRIMARY}; }}
+    QCheckBox::indicator {{
+        width: 22px; height: 22px; border-radius: 6px;
+        border: 2px solid {C.BORDER}; background-color: {C.BG_SECONDARY};
+    }}
+    QCheckBox::indicator:hover   {{ border-color: {C.TEXT_TERTIARY}; }}
+    QCheckBox::indicator:checked {{
+        background-color: {C.PRIMARY}; border-color: {C.PRIMARY};
+    }}
+    QCheckBox::indicator:checked:hover {{
+        background-color: {C.PRIMARY_HOVER}; border-color: {C.PRIMARY_HOVER};
+    }}
+
+    QFrame[class="card"]        {{ background-color: {C.BG_SECONDARY}; border: 1px solid {C.BORDER}; border-radius: 12px; }}
+    QFrame[class="status-card"] {{ background-color: {C.BG_TERTIARY}; border-radius: 8px; padding: 12px; }}
+
+    QSplitter::handle           {{ background-color: {C.BORDER}; }}
+    QSplitter::handle:horizontal {{ width: 2px; }}
+    QSplitter::handle:vertical   {{ height: 2px; }}
+
+    QTabWidget::pane {{ border: 1px solid {C.BORDER}; border-radius: 8px; background-color: {C.BG_SECONDARY}; padding: 8px; }}
+    QTabBar::tab {{ font-size: {Fonts.SIZE_BASE}px; padding: 12px 24px; border: none; background-color: transparent; color: {C.TEXT_SECONDARY}; border-bottom: 2px solid transparent; }}
+    QTabBar::tab:hover    {{ color: {C.TEXT_PRIMARY}; }}
+    QTabBar::tab:selected {{ color: {C.PRIMARY}; border-bottom: 2px solid {C.PRIMARY}; }}
+
+    QStatusBar {{ font-size: {Fonts.SIZE_SM}px; background-color: {C.BG_SECONDARY}; color: {C.TEXT_SECONDARY}; border-top: 1px solid {C.BORDER}; padding: 8px; }}
+
+    QToolTip {{ font-size: {Fonts.SIZE_SM}px; background-color: {C.BG_TERTIARY}; color: {C.TEXT_PRIMARY}; border: 1px solid {C.BORDER}; border-radius: 6px; padding: 8px 12px; }}
+
+    QMenuBar {{ font-size: {Fonts.SIZE_BASE}px; background-color: {C.BG_SECONDARY}; color: {C.TEXT_PRIMARY}; padding: 4px; }}
+    QMenuBar::item {{ padding: 8px 16px; border-radius: 6px; }}
+    QMenuBar::item:selected {{ background-color: {C.BG_HOVER}; }}
+    QMenu {{ font-size: {Fonts.SIZE_BASE}px; background-color: {C.BG_SECONDARY}; border: 1px solid {C.BORDER}; border-radius: 8px; padding: 8px; }}
+    QMenu::item {{ padding: 10px 24px; border-radius: 6px; }}
+    QMenu::item:selected {{ background-color: {C.PRIMARY_MUTED}; color: {C.PRIMARY}; }}
+
+    QMessageBox {{ background-color: {C.BG_SECONDARY}; }}
+    QMessageBox QLabel {{ font-size: {Fonts.SIZE_BASE}px; color: {C.TEXT_PRIMARY}; }}
+    """
+
+
+# Global state
+_current_theme = "dark"   # "dark" | "light"
+
+
+def get_current_theme() -> str:
+    return _current_theme
+
+
+def get_current_colors():
+    """Return the active Colors class (LightColors or Colors) for the current theme."""
+    return LightColors if _current_theme == "light" else Colors
+
+
+def get_current_stylesheet() -> str:
+    """Return the base stylesheet for the current theme."""
+    return get_light_stylesheet() if _current_theme == "light" else get_stylesheet()
+
+
+def apply_theme(app: QApplication, theme: str = "dark"):
+    """Apply the given theme ('dark' or 'light') to the application."""
+    global _current_theme
+    _current_theme = theme
+    if theme == "light":
+        app.setStyleSheet(get_light_stylesheet())
+    else:
+        app.setStyleSheet(get_stylesheet())
     font = QFont("Segoe UI", Fonts.SIZE_BASE)
     app.setFont(font)
 

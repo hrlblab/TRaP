@@ -35,7 +35,8 @@ from utils.SpectralPreprocess import (
     FluorescenceBackgroundSubtraction, Normalize
 )
 from UI_utils.UI_Config_Manager_v2 import ConfigManager
-from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
+from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
+def _C(): return get_current_colors()
 
 
 VALID_DENOISE   = {"Savitzky-Golay", "Moving Average", "Median Filter", "None"}
@@ -358,7 +359,7 @@ class PreviewCanvas(FigureCanvas):
 
     def __init__(self, parent=None, width=6, height=4, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
-        self.fig.set_facecolor(Colors.BG_SECONDARY)
+        self.fig.set_facecolor(_C().BG_SECONDARY)
         self.ax = self.fig.add_subplot(111)
         super().__init__(self.fig)
         self.setParent(parent)
@@ -383,12 +384,12 @@ class PreviewCanvas(FigureCanvas):
 
     def _style_axis(self):
         fs_title, _, fs_tick, _ = self._font_sizes()
-        self.ax.set_facecolor(Colors.BG_TERTIARY)
-        self.ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-        self.ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
+        self.ax.set_facecolor(_C().BG_TERTIARY)
+        self.ax.grid(True, alpha=0.2, linestyle='--', color=_C().BORDER)
+        self.ax.tick_params(labelsize=fs_tick, colors=_C().TEXT_SECONDARY)
         for spine in self.ax.spines.values():
-            spine.set_color(Colors.BORDER)
-        self.ax.set_title("Preview", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+            spine.set_color(_C().BORDER)
+        self.ax.set_title("Preview", fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -410,19 +411,19 @@ class PreviewCanvas(FigureCanvas):
         self._style_axis()
 
         if wvn_before is not None and len(wvn_before) == len(spect_before):
-            self.ax.plot(wvn_before, spect_before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.6, label='Raw')
+            self.ax.plot(wvn_before, spect_before, color=_C().TEXT_TERTIARY, linewidth=1.2, alpha=0.6, label='Raw')
         else:
-            self.ax.plot(spect_before, color=Colors.TEXT_TERTIARY, linewidth=1.2, alpha=0.6, label='Raw')
+            self.ax.plot(spect_before, color=_C().TEXT_TERTIARY, linewidth=1.2, alpha=0.6, label='Raw')
 
         if wvn_after is not None and len(wvn_after) == len(spect_after):
-            self.ax.plot(wvn_after, spect_after, color=Colors.SUCCESS, linewidth=1.5, label='Processed')
+            self.ax.plot(wvn_after, spect_after, color=_C().SUCCESS, linewidth=1.5, label='Processed')
         else:
-            self.ax.plot(spect_after, color=Colors.SUCCESS, linewidth=1.5, label='Processed')
+            self.ax.plot(spect_after, color=_C().SUCCESS, linewidth=1.5, label='Processed')
 
-        self.ax.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
-        self.ax.set_ylabel("Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
-        self.ax.set_title(f"Preview: {filename}", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax.legend(loc='best', fontsize=fs_legend, facecolor=Colors.BG_TERTIARY, edgecolor=Colors.BORDER, labelcolor=Colors.TEXT_PRIMARY)
+        self.ax.set_xlabel("Wavenumber (cm$^{-1}$)", fontsize=fs_label, color=_C().TEXT_SECONDARY)
+        self.ax.set_ylabel("Intensity", fontsize=fs_label, color=_C().TEXT_SECONDARY)
+        self.ax.set_title(f"Preview: {filename}", fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
+        self.ax.legend(loc='best', fontsize=fs_legend, facecolor=_C().BG_TERTIARY, edgecolor=_C().BORDER, labelcolor=_C().TEXT_PRIMARY)
         self.fig.tight_layout(pad=2.0)
         self.draw()
 
@@ -444,7 +445,7 @@ class BatchPMeanUI(QMainWindow):
         self.config_manager = ConfigManager()
         self.current_system = self.config_manager.params.get("System", "")
         # Apply unified dark theme
-        self.setStyleSheet(get_stylesheet())
+        self.setStyleSheet(get_current_stylesheet())
 
         # State
         self.data_files = []
@@ -602,11 +603,11 @@ class BatchPMeanUI(QMainWindow):
         self.lbl_system_info = QLabel(system_text)
         self.lbl_system_info.setWordWrap(True)
         self.lbl_system_info.setStyleSheet(
-            f"color: {Colors.SUCCESS}; font-weight: bold; padding: 10px; "
-            f"background-color: {Colors.SUCCESS_BG}; border-radius: 8px; font-size: {Fonts.SIZE_BASE}px;"
+            f"color: {_C().SUCCESS}; font-weight: bold; padding: 10px; "
+            f"background-color: {_C().SUCCESS_BG}; border-radius: 8px; font-size: {Fonts.SIZE_BASE}px;"
             if is_renishaw else
-            f"color: {Colors.PRIMARY}; font-weight: bold; padding: 10px; "
-            f"background-color: {Colors.PRIMARY_MUTED}; border-radius: 8px; font-size: {Fonts.SIZE_BASE}px;"
+            f"color: {_C().PRIMARY}; font-weight: bold; padding: 10px; "
+            f"background-color: {_C().PRIMARY_MUTED}; border-radius: 8px; font-size: {Fonts.SIZE_BASE}px;"
         )
         files_layout.addWidget(self.lbl_system_info)
 
@@ -621,7 +622,7 @@ class BatchPMeanUI(QMainWindow):
         files_layout.addWidget(self.list_data)
 
         self.lbl_data_count = QLabel("0 files selected")
-        self.lbl_data_count.setStyleSheet("color: #6c757d; font-style: italic;")
+        self.lbl_data_count.setStyleSheet(f"color: {_C().TEXT_TERTIARY}; font-style: italic;")
         files_layout.addWidget(self.lbl_data_count)
 
         # WL Correction (container widget for visibility control)
@@ -634,7 +635,7 @@ class BatchPMeanUI(QMainWindow):
         self.btn_select_wlcorr.setMinimumWidth(160)
         wl_layout.addWidget(self.btn_select_wlcorr)
         self.lbl_wlcorr = QLabel("Not selected")
-        self.lbl_wlcorr.setStyleSheet("color: #dc3545;")
+        self.lbl_wlcorr.setStyleSheet(f"color: {_C().DANGER};")
         self.lbl_wlcorr.setWordWrap(True)
         wl_layout.addWidget(self.lbl_wlcorr, 1)
         files_layout.addWidget(self.wl_widget)
@@ -649,7 +650,7 @@ class BatchPMeanUI(QMainWindow):
         self.btn_select_wvn.setMinimumWidth(160)
         cal_layout.addWidget(self.btn_select_wvn)
         self.lbl_wvn = QLabel("Not selected")
-        self.lbl_wvn.setStyleSheet("color: #dc3545;")
+        self.lbl_wvn.setStyleSheet(f"color: {_C().DANGER};")
         self.lbl_wvn.setWordWrap(True)
         cal_layout.addWidget(self.lbl_wvn, 1)
         files_layout.addWidget(self.cal_widget)
@@ -859,9 +860,9 @@ class BatchPMeanUI(QMainWindow):
     def _log(self, message: str, level: str = "info"):
         """Add message to log with color coding."""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        colors = {"info": "#333", "success": "#28a745", "error": "#dc3545", "warning": "#ffc107"}
-        color = colors.get(level, "#333")
-        html = f'<span style="color: #6c757d;">[{timestamp}]</span> <span style="color: {color};">{message}</span>'
+        colors = {"info": _C().TEXT_PRIMARY, "success": _C().SUCCESS, "error": _C().DANGER, "warning": _C().WARNING}
+        color = colors.get(level, _C().TEXT_PRIMARY)
+        html = f'<span style="color: {_C().TEXT_TERTIARY}">[{timestamp}]</span> <span style="color: {color};">{message}</span>'
         self.log_text.append(html)
         self.log_text.moveCursor(QTextCursor.End)
 
@@ -967,7 +968,7 @@ class BatchPMeanUI(QMainWindow):
         if file:
             self.wlcorr_file = file
             self.lbl_wlcorr.setText(os.path.basename(file))
-            self.lbl_wlcorr.setStyleSheet("color: #28a745;")
+            self.lbl_wlcorr.setStyleSheet(f"color: {_C().SUCCESS};")
             self.cached_wl_corr = None  # Clear cache
             self._log(f"WL Correction: {os.path.basename(file)}", "info")
 
@@ -979,7 +980,7 @@ class BatchPMeanUI(QMainWindow):
         if file:
             self.wvn_file = file
             self.lbl_wvn.setText(os.path.basename(file))
-            self.lbl_wvn.setStyleSheet("color: #28a745;")
+            self.lbl_wvn.setStyleSheet(f"color: {_C().SUCCESS};")
             self.cached_wvn = None  # Clear cache
             self._log(f"Calibration: {os.path.basename(file)}", "info")
 

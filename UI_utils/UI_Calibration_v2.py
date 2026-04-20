@@ -44,7 +44,8 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.figure import Figure
 
 from utils.Calibration_v2 import ReferenceLibrary, CalibrationProcessor
-from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
+from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
+def _C(): return get_current_colors()
 
 
 def load_spectrum_file(filepath: str) -> np.ndarray:
@@ -91,7 +92,7 @@ class SpectrumCanvas(FigureCanvas):
 
     def __init__(self, parent=None, width=8, height=4, dpi=100):
         self.fig = Figure(figsize=(width, height), dpi=dpi)
-        self.fig.set_facecolor(Colors.BG_SECONDARY)
+        self.fig.set_facecolor(_C().BG_SECONDARY)
         self.ax = self.fig.add_subplot(111)
         super().__init__(self.fig)
         self.setParent(parent)
@@ -135,11 +136,11 @@ class SpectrumCanvas(FigureCanvas):
     def _style_axis(self):
         """Apply dark theme styling to axis."""
         _, _, fs_tick, _ = self._font_sizes()
-        self.ax.set_facecolor(Colors.BG_TERTIARY)
-        self.ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-        self.ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
+        self.ax.set_facecolor(_C().BG_TERTIARY)
+        self.ax.grid(True, alpha=0.2, linestyle='--', color=_C().BORDER)
+        self.ax.tick_params(labelsize=fs_tick, colors=_C().TEXT_SECONDARY)
         for spine in self.ax.spines.values():
-            spine.set_color(Colors.BORDER)
+            spine.set_color(_C().BORDER)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -164,8 +165,8 @@ class SpectrumCanvas(FigureCanvas):
             self.coord_text.remove()
 
         # Create crosshair lines (initially invisible)
-        self.crosshair_v = self.ax.axvline(x=0, color=Colors.WARNING, linewidth=1, linestyle='--', alpha=0.8, visible=False)
-        self.crosshair_h = self.ax.axhline(y=0, color=Colors.WARNING, linewidth=1, linestyle='--', alpha=0.8, visible=False)
+        self.crosshair_v = self.ax.axvline(x=0, color=_C().WARNING, linewidth=1, linestyle='--', alpha=0.8, visible=False)
+        self.crosshair_h = self.ax.axhline(y=0, color=_C().WARNING, linewidth=1, linestyle='--', alpha=0.8, visible=False)
 
         # Coordinate text box
         _, fs_label, _, _ = self._font_sizes()
@@ -173,8 +174,8 @@ class SpectrumCanvas(FigureCanvas):
             0.02, 0.98, '', transform=self.ax.transAxes,
             fontsize=max(8, fs_label), verticalalignment='top',
             fontfamily='monospace',
-            color=Colors.TEXT_PRIMARY,
-            bbox=dict(boxstyle='round,pad=0.5', facecolor=Colors.BG_DARK, edgecolor=Colors.PRIMARY, alpha=0.9)
+            color=_C().TEXT_PRIMARY,
+            bbox=dict(boxstyle='round,pad=0.5', facecolor=_C().BG_DARK, edgecolor=_C().PRIMARY, alpha=0.9)
         )
 
     def load_spectrum(self, spectrum: np.ndarray, title: str = "Spectrum"):
@@ -191,10 +192,10 @@ class SpectrumCanvas(FigureCanvas):
         fs_title, fs_label, _, _ = self._font_sizes()
         self.ax.clear()
         self._style_axis()
-        self.ax.plot(self.normalized_spectrum, color=Colors.PRIMARY, linewidth=1.0)
-        self.ax.set_title(title, fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax.set_xlabel("Pixel", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
-        self.ax.set_ylabel("Normalized Intensity", fontsize=fs_label, color=Colors.TEXT_SECONDARY)
+        self.ax.plot(self.normalized_spectrum, color=_C().PRIMARY, linewidth=1.0)
+        self.ax.set_title(title, fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
+        self.ax.set_xlabel("Pixel", fontsize=fs_label, color=_C().TEXT_SECONDARY)
+        self.ax.set_ylabel("Normalized Intensity", fontsize=fs_label, color=_C().TEXT_SECONDARY)
 
         # Initialize crosshair
         self._init_crosshair()
@@ -299,7 +300,7 @@ class SpectrumCanvas(FigureCanvas):
         self.selected_points.append((peak_x, peak_y))
 
         # Mark on plot with prominent style
-        self.ax.plot(peak_x, peak_y_norm, 'o', color=Colors.DANGER, markersize=10, markeredgecolor='white', markeredgewidth=2)
+        self.ax.plot(peak_x, peak_y_norm, 'o', color=_C().DANGER, markersize=10, markeredgecolor='white', markeredgewidth=2)
         _, fs_label, _, _ = self._font_sizes()
         self.ax.annotate(
             f"{len(self.selected_points)}",
@@ -309,8 +310,8 @@ class SpectrumCanvas(FigureCanvas):
             ha='center',
             fontsize=max(8, fs_label),
             fontweight='bold',
-            color=Colors.DANGER,
-            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', edgecolor=Colors.DANGER, alpha=0.9)
+            color=_C().DANGER,
+            bbox=dict(boxstyle='round,pad=0.2', facecolor='white', edgecolor=_C().DANGER, alpha=0.9)
         )
         self.draw()
 
@@ -378,7 +379,7 @@ class LibrarySelectionWidget(QWidget):
 
         # Selection count label
         self.lbl_count = QLabel("Selected: 0")
-        self.lbl_count.setStyleSheet("color: #888;")
+        self.lbl_count.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         layout.addWidget(self.lbl_count)
 
     def _select_all(self):
@@ -455,7 +456,7 @@ class CalibrationUI(QDialog):
         self.resize(min(1200, int(screen.width() * 0.9)), min(800, int(screen.height() * 0.9)))
         self.move(screen.center() - self.rect().center())
         # Apply unified dark theme
-        self.setStyleSheet(get_stylesheet())
+        self.setStyleSheet(get_current_stylesheet())
 
         # Calibration processor
         self.processor = CalibrationProcessor()
@@ -479,7 +480,7 @@ class CalibrationUI(QDialog):
         # Title
         title = QLabel("X-Axis Wavenumber Calibration")
         title.setFont(QFont("Segoe UI", Fonts.SIZE_XXL, QFont.Bold))
-        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; padding: 10px;")
+        title.setStyleSheet(f"color: {_C().TEXT_PRIMARY}; padding: 10px;")
         title.setAlignment(Qt.AlignCenter)
         title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         main_layout.addWidget(title, 0)
@@ -501,13 +502,13 @@ class CalibrationUI(QDialog):
         # Step indicator
         self.lbl_step = QLabel("Step 1: Select Neon-Argon Reference Peaks")
         self.lbl_step.setFont(QFont("Segoe UI", Fonts.SIZE_LG, QFont.Bold))
-        self.lbl_step.setStyleSheet(f"color: {Colors.PRIMARY}; padding: 5px 0;")
+        self.lbl_step.setStyleSheet(f"color: {_C().PRIMARY}; padding: 5px 0;")
         left_layout.addWidget(self.lbl_step)
 
         # Instructions
         self.lbl_instructions = QLabel("")
         self.lbl_instructions.setWordWrap(True)
-        self.lbl_instructions.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; margin-bottom: 10px; font-size: {Fonts.SIZE_BASE}px;")
+        self.lbl_instructions.setStyleSheet(f"color: {_C().TEXT_SECONDARY}; margin-bottom: 10px; font-size: {Fonts.SIZE_BASE}px;")
         left_layout.addWidget(self.lbl_instructions)
 
         # Stacked widget for different steps (instead of tabs)
@@ -527,7 +528,7 @@ class CalibrationUI(QDialog):
         neon_spectrum_layout.addWidget(btn_upload_neon)
 
         self.lbl_neon_file = QLabel("No file loaded")
-        self.lbl_neon_file.setStyleSheet("color: #888;")
+        self.lbl_neon_file.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         neon_spectrum_layout.addWidget(self.lbl_neon_file)
 
         self.lbl_neon_peaks = QLabel("Select 0 peaks on the spectrum")
@@ -579,7 +580,7 @@ class CalibrationUI(QDialog):
             "Warning: This method is less accurate than using a known wavelength.\n"
             "Please make sure you understand the implications before proceeding."
         )
-        lbl_warning.setStyleSheet("color: #ff9800;")
+        lbl_warning.setStyleSheet(f"color: {_C().WARNING};")
         lbl_warning.setWordWrap(True)
         unknown_layout.addWidget(lbl_warning)
         wavelength_layout.addWidget(unknown_group)
@@ -602,7 +603,7 @@ class CalibrationUI(QDialog):
         acet_layout.addWidget(btn_upload_acet)
 
         self.lbl_acet_file = QLabel("No file loaded")
-        self.lbl_acet_file.setStyleSheet("color: #888;")
+        self.lbl_acet_file.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         acet_layout.addWidget(self.lbl_acet_file)
 
         self.lbl_acet_peaks = QLabel("Select 0 peaks on the spectrum")
@@ -872,7 +873,7 @@ class CalibrationUI(QDialog):
             self.canvas.set_max_points(len(self.neon_lib_widget.get_selected_indices()))
 
             self.lbl_neon_file.setText(f"Loaded: {os.path.basename(filepath)}")
-            self.lbl_neon_file.setStyleSheet("color: #28a745;")
+            self.lbl_neon_file.setStyleSheet(f"color: {_C().SUCCESS};")
             self.status_bar.showMessage(f"Neon spectrum loaded: {len(spectrum)} points")
 
         except Exception as e:
@@ -898,7 +899,7 @@ class CalibrationUI(QDialog):
             self.canvas.set_max_points(len(self.acet_lib_widget.get_selected_indices()))
 
             self.lbl_acet_file.setText(f"Loaded: {os.path.basename(filepath)}")
-            self.lbl_acet_file.setStyleSheet("color: #28a745;")
+            self.lbl_acet_file.setStyleSheet(f"color: {_C().SUCCESS};")
             self.status_bar.showMessage(f"Acetaminophen spectrum loaded")
 
         except Exception as e:
@@ -1011,7 +1012,7 @@ class CalibrationUI(QDialog):
                 result_text += f"Max error: {errors['neon_max_error']:.4f} cm^-1\n"
 
             self.lbl_result.setText(result_text)
-            self.lbl_result.setStyleSheet("color: #28a745;")
+            self.lbl_result.setStyleSheet(f"color: {_C().SUCCESS};")
 
             self.btn_save.setEnabled(True)
             self.btn_finish.setEnabled(True)
@@ -1066,7 +1067,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # Apply unified dark theme
-    app.setStyleSheet(get_stylesheet())
+    app.setStyleSheet(get_current_stylesheet())
 
     dlg = CalibrationUI()
     dlg.exec_()

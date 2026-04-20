@@ -27,35 +27,33 @@ from PyQt5.QtWidgets import (
     QCheckBox, QGroupBox, QGridLayout, QGraphicsOpacityEffect
 )
 
-from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
+from UI_utils.UI_theme import (get_stylesheet, get_light_stylesheet,
+                               get_current_theme, apply_theme as _apply_base_theme,
+                               Colors, LightColors, Fonts)
 
 
-def apply_modern_style(app):
-    """Apply unified premium dark theme stylesheet."""
-    # Use the unified theme with wizard-specific additions
-    base_style = get_stylesheet()
-    wizard_additions = f"""
-        /* Wizard-specific styles */
+def _wizard_additions(C):
+    """Wizard-specific stylesheet additions for a given Colors class."""
+    return f"""
         QLabel#Title {{
             font-size: {Fonts.SIZE_XXXL}px;
             font-weight: 700;
-            color: {Colors.TEXT_PRIMARY};
+            color: {C.TEXT_PRIMARY};
         }}
         QLabel#StepTitle {{
             font-size: {Fonts.SIZE_XL}px;
             font-weight: 600;
-            color: {Colors.PRIMARY};
+            color: {C.PRIMARY};
         }}
         QLabel#Subtitle {{
-            color: {Colors.TEXT_SECONDARY};
+            color: {C.TEXT_SECONDARY};
             font-size: {Fonts.SIZE_BASE}px;
         }}
         QLabel#Description {{
-            color: {Colors.TEXT_SECONDARY};
+            color: {C.TEXT_SECONDARY};
             font-size: {Fonts.SIZE_SM}px;
             line-height: 1.5;
         }}
-
         QPushButton.step {{
             text-align: left;
             padding: 14px 18px;
@@ -64,33 +62,42 @@ def apply_modern_style(app):
             font-size: {Fonts.SIZE_BASE}px;
         }}
         QPushButton.step:hover {{
-            background: {Colors.BG_HOVER};
+            background: {C.BG_HOVER};
         }}
         QPushButton.step[active="true"] {{
-            background: {Colors.PRIMARY_MUTED};
-            color: {Colors.PRIMARY_HOVER};
+            background: {C.PRIMARY_MUTED};
+            color: {C.PRIMARY_HOVER};
             font-weight: 600;
         }}
         QPushButton.step[completed="true"] {{
-            color: {Colors.SUCCESS};
+            color: {C.SUCCESS};
         }}
         QPushButton.step[skipped="true"] {{
-            color: {Colors.TEXT_TERTIARY};
-            background: {Colors.BG_TERTIARY};
+            color: {C.TEXT_TERTIARY};
+            background: {C.BG_TERTIARY};
             opacity: 0.5;
         }}
-
         QFrame#card {{
-            background: {Colors.BG_SECONDARY};
+            background: {C.BG_SECONDARY};
             border-radius: 16px;
         }}
         QFrame#statusCard {{
-            background: {Colors.BG_TERTIARY};
+            background: {C.BG_TERTIARY};
             border-radius: 10px;
             padding: 10px;
         }}
     """
-    app.setStyleSheet(base_style + wizard_additions)
+
+
+def apply_modern_style(app, theme: str = "dark"):
+    """Apply unified theme stylesheet (dark or light)."""
+    _apply_base_theme(app, theme)   # updates _current_theme state
+    if theme == "light":
+        additions = _wizard_additions(LightColors)
+    else:
+        additions = _wizard_additions(Colors)
+    app.setStyleSheet(app.styleSheet() + additions)
+
 
 
 class ModernCard(QFrame):
@@ -185,6 +192,22 @@ class ModernShell(QWidget):
             left.addWidget(b)
 
         left.addStretch(1)
+
+        # Theme toggle button
+        self._theme_btn = QPushButton("☀  Light Mode")
+        self._theme_btn.setCursor(Qt.PointingHandCursor)
+        self._theme_btn.setFixedHeight(32)
+        self._theme_btn.setStyleSheet("""
+            QPushButton {
+                font-size: 12px; font-weight: 500;
+                border: 1px solid #444; border-radius: 8px;
+                background: transparent; padding: 4px 10px;
+            }
+            QPushButton:hover { background: rgba(128,128,128,0.15); }
+        """)
+        self._theme_btn.clicked.connect(self._toggle_theme)
+        left.addWidget(self._theme_btn)
+
         left_scroll.setWidget(left_widget)
 
         # Right content card
@@ -205,6 +228,37 @@ class ModernShell(QWidget):
     def _on_nav_clicked(self, idx: int):
         if callable(self.on_step_request):
             self.on_step_request(idx)
+
+    def _toggle_theme(self):
+        from UI_utils.UI_theme import get_current_theme
+        app = QApplication.instance()
+        current = get_current_theme()
+        new_theme = "light" if current == "dark" else "dark"
+        apply_modern_style(app, new_theme)
+        # Re-polish entire widget tree so property-based QSS rules re-evaluate
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self.update()
+        if new_theme == "light":
+            self._theme_btn.setText("🌙  Dark Mode")
+            self._theme_btn.setStyleSheet("""
+                QPushButton {
+                    font-size: 12px; font-weight: 500;
+                    border: 1px solid #999; border-radius: 8px;
+                    background: transparent; padding: 4px 10px; color: #333;
+                }
+                QPushButton:hover { background: rgba(0,0,0,0.08); }
+            """)
+        else:
+            self._theme_btn.setText("☀  Light Mode")
+            self._theme_btn.setStyleSheet("""
+                QPushButton {
+                    font-size: 12px; font-weight: 500;
+                    border: 1px solid #444; border-radius: 8px;
+                    background: transparent; padding: 4px 10px;
+                }
+                QPushButton:hover { background: rgba(128,128,128,0.15); }
+            """)
 
     def set_active_step(self, idx: int):
         """Update navigation rail to highlight active step."""
@@ -545,11 +599,12 @@ class SystemSelectWizard(QWidget):
             row = i // 2
             col = (i % 2) * 2
             lbl = QLabel(label_text)
-            lbl.setStyleSheet("color: #888; font-size: 11px;")
+            lbl.setProperty("class", "hint")
+            lbl.setStyleSheet("font-size: 11px;")
             config_layout.addWidget(lbl, row, col)
 
             value_lbl = QLabel("N/A")
-            value_lbl.setStyleSheet("color: #EAEAEA; font-size: 11px; font-weight: 500;")
+            value_lbl.setStyleSheet("font-size: 11px; font-weight: 500;")
             self.config_labels[key] = value_lbl
             config_layout.addWidget(value_lbl, row, col + 1)
 
@@ -562,7 +617,8 @@ class SystemSelectWizard(QWidget):
         status_layout.setContentsMargins(12, 8, 12, 8)
 
         self.lbl_status = QLabel("Status: Ready")
-        self.lbl_status.setStyleSheet("color: #888;")
+        self.lbl_status.setProperty("class", "hint")
+        self.lbl_status.setStyleSheet("")
         status_layout.addWidget(self.lbl_status)
         status_layout.addStretch()
 
@@ -588,7 +644,8 @@ class SystemSelectWizard(QWidget):
 
         # Navigation hint
         nav_hint = QLabel("Tip: Use the left sidebar to navigate between steps")
-        nav_hint.setStyleSheet("color: #555; font-size: 11px;")
+        nav_hint.setProperty("class", "hint")
+        nav_hint.setStyleSheet("font-size: 11px;")
         nav_hint.setAlignment(Qt.AlignCenter)
         card_layout.addWidget(nav_hint)
 

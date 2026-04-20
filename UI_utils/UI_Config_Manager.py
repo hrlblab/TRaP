@@ -7,7 +7,8 @@ from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QLineEdi
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QFont
 
-from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
+from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
+def _C(): return get_current_colors()
 
 class ConfigManager:
     _instance = None
@@ -74,10 +75,10 @@ class ConfigManagerUI(QWidget):
             },
             "Renishaw": {"wavelengths": ["785", "633"]},
             "Portable": {"wavelengths": ["750", "730"]},
-            "MANTIS": {
-                "wavelengths": ["830"],
-                "detectors": {"830": ["400br", "blaze"]}
-            }
+            # "MANTIS": {                          # temporarily disabled
+            #     "wavelengths": ["830"],
+            #     "detectors": {"830": ["400br", "blaze"]}
+            # }
         }
 
         self.initUI()
@@ -88,7 +89,7 @@ class ConfigManagerUI(QWidget):
         self.resize(min(400, int(screen.width() * 0.9)), min(600, int(screen.height() * 0.9)))
         self.move(screen.center() - self.rect().center())
         # Apply unified dark theme
-        self.setStyleSheet(get_stylesheet())
+        self.setStyleSheet(get_current_stylesheet())
 
         # Wrap everything in a scroll area
         outer_layout = QVBoxLayout(self)
@@ -106,7 +107,7 @@ class ConfigManagerUI(QWidget):
         # Title
         title = QLabel("System Configuration")
         title.setFont(QFont("Segoe UI", Fonts.SIZE_XL, QFont.Bold))
-        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; padding: 10px 0;")
+        title.setStyleSheet(f"color: {_C().TEXT_PRIMARY}; padding: 10px 0;")
         self.layout.addWidget(title)
 
         # System

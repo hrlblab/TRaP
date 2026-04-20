@@ -42,7 +42,8 @@ from utils.WLCorrection import (
     read_vector_file, read_2col_file,
     wl_correction_from_true_and_measured, nist_correction_from_srm
 )
-from UI_utils.UI_theme import get_stylesheet, Colors, Fonts
+from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
+def _C(): return get_current_colors()
 
 
 class SRCF_UI(QDialog):
@@ -63,7 +64,7 @@ class SRCF_UI(QDialog):
         self.resize(min(1100, int(screen.width() * 0.9)), min(750, int(screen.height() * 0.9)))
         self.move(screen.center() - self.rect().center())
         # Apply unified dark theme
-        self.setStyleSheet(get_stylesheet())
+        self.setStyleSheet(get_current_stylesheet())
 
         # ============ Data and State ============
         self.result = None
@@ -110,7 +111,7 @@ class SRCF_UI(QDialog):
         # Title
         title = QLabel("Spectral Response Correction Factor")
         title.setFont(QFont("Segoe UI", Fonts.SIZE_XL, QFont.Bold))
-        title.setStyleSheet(f"color: {Colors.TEXT_PRIMARY}; padding: 6px;")
+        title.setStyleSheet(f"color: {_C().TEXT_PRIMARY}; padding: 6px;")
         title.setAlignment(Qt.AlignCenter)
         title.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         main_layout.addWidget(title, 0)
@@ -126,19 +127,19 @@ class SRCF_UI(QDialog):
         left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         left_scroll.setMinimumWidth(250)
         left_scroll.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
-        left_scroll.setStyleSheet("""
-            QScrollArea { background: transparent; border: none; }
-            QScrollBar:vertical {
+        left_scroll.setStyleSheet(f"""
+            QScrollArea {{ background: transparent; border: none; }}
+            QScrollBar:vertical {{
                 background: transparent;
                 width: 6px;
                 border-radius: 3px;
-            }
-            QScrollBar::handle:vertical {
-                background: #444;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {_C().BORDER};
                 border-radius: 3px;
                 min-height: 20px;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
         """)
 
         left_widget = QWidget()
@@ -170,7 +171,7 @@ class SRCF_UI(QDialog):
         self.btn_load_calib = QPushButton("Load Calibration (.mat)")
         self.btn_load_calib.clicked.connect(self._load_calibration)
         self.lbl_calib_status = QLabel("Not loaded")
-        self.lbl_calib_status.setStyleSheet("color: #888;")
+        self.lbl_calib_status.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         calib_row.addWidget(self.btn_load_calib)
         calib_row.addWidget(self.lbl_calib_status)
         calib_row.addStretch()
@@ -188,7 +189,7 @@ class SRCF_UI(QDialog):
         self.spin_laser_wl.valueChanged.connect(lambda v: setattr(self, 'laser_wavelength', v))
         renishaw_wl_layout.addWidget(self.spin_laser_wl)
         lbl_renishaw_note = QLabel("(wavenumber axis auto-extracted from spectrum file)")
-        lbl_renishaw_note.setStyleSheet("color: #888; font-style: italic;")
+        lbl_renishaw_note.setStyleSheet(f"color: {_C().TEXT_TERTIARY}; font-style: italic;")
         renishaw_wl_layout.addWidget(lbl_renishaw_note)
         renishaw_wl_layout.addStretch()
         left_layout.addWidget(self.renishaw_wl_group)
@@ -207,7 +208,7 @@ class SRCF_UI(QDialog):
         self.btn_wl_measured = QPushButton("Load Measured WL Spectrum")
         self.btn_wl_measured.clicked.connect(self._load_wl_measured)
         self.lbl_wl_measured = QLabel("Not loaded")
-        self.lbl_wl_measured.setStyleSheet("color: #888;")
+        self.lbl_wl_measured.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         wl_meas_row.addWidget(self.btn_wl_measured)
         wl_meas_row.addWidget(self.lbl_wl_measured)
         wl_meas_row.addStretch()
@@ -218,7 +219,7 @@ class SRCF_UI(QDialog):
         self.btn_wl_ref = QPushButton("Load True WL Reference (2-col)")
         self.btn_wl_ref.clicked.connect(self._load_wl_reference)
         self.lbl_wl_ref = QLabel("Not loaded")
-        self.lbl_wl_ref.setStyleSheet("color: #888;")
+        self.lbl_wl_ref.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         wl_ref_row.addWidget(self.btn_wl_ref)
         wl_ref_row.addWidget(self.lbl_wl_ref)
         wl_ref_row.addStretch()
@@ -258,7 +259,7 @@ class SRCF_UI(QDialog):
         self.btn_srm = QPushButton("Load SRM Measured Spectrum")
         self.btn_srm.clicked.connect(self._load_srm)
         self.lbl_srm = QLabel("Not loaded")
-        self.lbl_srm.setStyleSheet("color: #888;")
+        self.lbl_srm.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         srm_row.addWidget(self.btn_srm)
         srm_row.addWidget(self.lbl_srm)
         srm_row.addStretch()
@@ -266,7 +267,7 @@ class SRCF_UI(QDialog):
 
         # NIST Coefficients - hardcoded, show info label only
         coeffs_info = QLabel("✓ NIST Polynomial Coefficients (built-in)")
-        coeffs_info.setStyleSheet("color: #28a745; font-style: italic;")
+        coeffs_info.setStyleSheet(f"color: {_C().SUCCESS}; font-style: italic;")
         nist_layout.addWidget(coeffs_info)
 
         # NIST Parameters
@@ -308,7 +309,7 @@ class SRCF_UI(QDialog):
         self.btn_load_exist = QPushButton("Load Existing Correction Factor")
         self.btn_load_exist.clicked.connect(self._load_existing_factor)
         self.lbl_exist = QLabel("Not loaded")
-        self.lbl_exist.setStyleSheet("color: #888;")
+        self.lbl_exist.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         exist_row.addWidget(self.btn_load_exist)
         exist_row.addWidget(self.lbl_exist)
         exist_row.addStretch()
@@ -320,7 +321,7 @@ class SRCF_UI(QDialog):
         # ---------- Compute Button ----------
         self.btn_compute = QPushButton("Compute Correction Factor")
         self.btn_compute.setStyleSheet(
-            "background-color: #4C8BF5; color: white; font-weight: bold; padding: 8px;"
+            f"background-color: {_C().PRIMARY}; color: white; font-weight: bold; padding: 8px;"
         )
         self.btn_compute.clicked.connect(self._compute_correction)
         left_layout.addWidget(self.btn_compute)
@@ -333,7 +334,7 @@ class SRCF_UI(QDialog):
         self.btn_load_raw = QPushButton("Load Raw Spectrum")
         self.btn_load_raw.clicked.connect(self._load_raw_spectrum)
         self.lbl_raw_status = QLabel("Not loaded")
-        self.lbl_raw_status.setStyleSheet("color: #888;")
+        self.lbl_raw_status.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         raw_row.addWidget(self.btn_load_raw)
         raw_row.addWidget(self.lbl_raw_status)
         raw_row.addStretch()
@@ -343,7 +344,7 @@ class SRCF_UI(QDialog):
         # ---------- Apply Correction Button ----------
         self.btn_apply = QPushButton("Apply Correction to Raw Spectrum")
         self.btn_apply.setStyleSheet(
-            "background-color: #28a745; color: white; font-weight: bold; padding: 8px;"
+            f"background-color: {_C().SUCCESS}; color: white; font-weight: bold; padding: 8px;"
         )
         self.btn_apply.clicked.connect(self._apply_correction)
         self.btn_apply.setEnabled(False)
@@ -371,7 +372,7 @@ class SRCF_UI(QDialog):
         btn_cancel.clicked.connect(self.reject)
 
         self.btn_ok = QPushButton("Finish")
-        self.btn_ok.setStyleSheet("background-color: #4C8BF5; color: white;")
+        self.btn_ok.setStyleSheet(f"background-color: {_C().PRIMARY}; color: white;")
         self.btn_ok.clicked.connect(self._on_finish)
 
         bottom_layout.addStretch()
@@ -391,7 +392,7 @@ class SRCF_UI(QDialog):
 
         # Matplotlib figure with two subplots (dark theme)
         self.fig = Figure(figsize=(6, 5), dpi=100)
-        self.fig.set_facecolor(Colors.BG_SECONDARY)
+        self.fig.set_facecolor(_C().BG_SECONDARY)
         self.ax_corr = self.fig.add_subplot(211)
         self.ax_compare = self.fig.add_subplot(212)
         self._style_axes()
@@ -452,13 +453,13 @@ class SRCF_UI(QDialog):
         """Apply dark theme styling to matplotlib axes."""
         fs_title, _, fs_tick, _ = self._canvas_font_sizes()
         for ax in [self.ax_corr, self.ax_compare]:
-            ax.set_facecolor(Colors.BG_TERTIARY)
-            ax.grid(True, alpha=0.2, linestyle='--', color=Colors.BORDER)
-            ax.tick_params(labelsize=fs_tick, colors=Colors.TEXT_SECONDARY)
+            ax.set_facecolor(_C().BG_TERTIARY)
+            ax.grid(True, alpha=0.2, linestyle='--', color=_C().BORDER)
+            ax.tick_params(labelsize=fs_tick, colors=_C().TEXT_SECONDARY)
             for spine in ax.spines.values():
-                spine.set_color(Colors.BORDER)
-        self.ax_corr.set_title("Correction Factor", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
-        self.ax_compare.set_title("Spectrum Comparison", fontsize=fs_title, fontweight='bold', color=Colors.TEXT_PRIMARY)
+                spine.set_color(_C().BORDER)
+        self.ax_corr.set_title("Correction Factor", fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
+        self.ax_compare.set_title("Spectrum Comparison", fontsize=fs_title, fontweight='bold', color=_C().TEXT_PRIMARY)
 
     # ============================================================
     # Method Selection
@@ -522,7 +523,7 @@ class SRCF_UI(QDialog):
                     self.file_wvn_mat = fp
                     self.result = "WvnUploaded"
                     self.lbl_calib_status.setText(f"✓ Loaded ({len(self.wvn)} points)")
-                    self.lbl_calib_status.setStyleSheet("color: #28a745;")
+                    self.lbl_calib_status.setStyleSheet(f"color: {_C().SUCCESS};")
                     self.status_bar.showMessage(
                         f"Calibration loaded: {len(self.wvn)} points, laser {self.laser_wavelength:.1f} nm"
                     )
@@ -557,7 +558,7 @@ class SRCF_UI(QDialog):
                 self.wl_measured_data = read_vector_file(fp)
             self.file_wl_measured = fp
             self.lbl_wl_measured.setText(f"✓ Loaded ({len(self.wl_measured_data)} pts)")
-            self.lbl_wl_measured.setStyleSheet("color: #28a745;")
+            self.lbl_wl_measured.setStyleSheet(f"color: {_C().SUCCESS};")
             self.status_bar.showMessage(f"Measured WL loaded: {os.path.basename(fp)}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to read: {e}")
@@ -575,7 +576,7 @@ class SRCF_UI(QDialog):
             self.wlmax_data = read_2col_file(fp)
             self.file_wlmax = fp
             self.lbl_wl_ref.setText(f"✓ Loaded ({len(self.wlmax_data)} pts)")
-            self.lbl_wl_ref.setStyleSheet("color: #28a745;")
+            self.lbl_wl_ref.setStyleSheet(f"color: {_C().SUCCESS};")
             self.status_bar.showMessage(f"True WL reference loaded: {os.path.basename(fp)}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to read: {e}")
@@ -602,7 +603,7 @@ class SRCF_UI(QDialog):
                 self.srm_data = read_vector_file(fp)
             self.file_srm_measured = fp
             self.lbl_srm.setText(f"✓ Loaded ({len(self.srm_data)} pts)")
-            self.lbl_srm.setStyleSheet("color: #28a745;")
+            self.lbl_srm.setStyleSheet(f"color: {_C().SUCCESS};")
             self.status_bar.showMessage(f"SRM spectrum loaded: {os.path.basename(fp)}")
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to read: {e}")
@@ -622,7 +623,7 @@ class SRCF_UI(QDialog):
             self.mode = "EXIST"
             self.result = "UseExistingFactor"
             self.lbl_exist.setText(f"✓ Loaded ({len(self.corr)} pts)")
-            self.lbl_exist.setStyleSheet("color: #28a745;")
+            self.lbl_exist.setStyleSheet(f"color: {_C().SUCCESS};")
             self.btn_save_corr.setEnabled(True)
             self._update_apply_button()
             self._plot_correction_factor()
@@ -646,7 +647,7 @@ class SRCF_UI(QDialog):
             self.raw_spectrum = data  # Keep as (N, 1) column vector
             self.raw_spectrum_file = fp
             self.lbl_raw_status.setText(f"✓ Loaded ({len(self.raw_spectrum)} pts)")
-            self.lbl_raw_status.setStyleSheet("color: #28a745;")
+            self.lbl_raw_status.setStyleSheet(f"color: {_C().SUCCESS};")
             self._update_apply_button()
             self.status_bar.showMessage(
                 f"Raw spectrum loaded: {os.path.basename(fp)} ({len(self.raw_spectrum)} points)"

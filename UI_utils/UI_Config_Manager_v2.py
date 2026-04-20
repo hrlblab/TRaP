@@ -26,6 +26,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QFont
+from UI_utils.UI_theme import get_current_colors
+def _C(): return get_current_colors()
 
 
 # Default config directory
@@ -118,7 +120,7 @@ class ConfigManager:
         if os.path.exists(DEFAULT_CONFIG):
             self.load_config(DEFAULT_CONFIG)  # warnings silently ignored at startup
 
-    VALID_SYSTEMS = {"Cart", "Renishaw", "Portable", "MANTIS"}
+    VALID_SYSTEMS = {"Cart", "Renishaw", "Portable"}  # "MANTIS" temporarily disabled
     VALID_RANGES  = {"Fingerprint", "High WVN", "Full Range", "Custom"}
 
     def load_config(self, file_path: str) -> tuple:
@@ -257,10 +259,10 @@ class ConfigManagerUI(QDialog):
             "wavelengths": ["750", "730"],
             "detectors": {}
         },
-        "MANTIS": {
-            "wavelengths": ["830"],
-            "detectors": {"830": ["400br", "Blaze"]}
-        }
+        # "MANTIS": {                              # temporarily disabled
+        #     "wavelengths": ["830"],
+        #     "detectors": {"830": ["400br", "Blaze"]}
+        # }
     }
 
     PROBE_OPTIONS = ["Microscope", "Handheld", "Lensed", "SORS", "Classic"]
@@ -277,7 +279,7 @@ class ConfigManagerUI(QDialog):
     SYSTEM_CCD_X = {
         "Renishaw": 1023,
         "Portable": None,   # unknown, leave editable
-        "MANTIS":   None,
+        # "MANTIS":   None,                        # temporarily disabled
     }
 
     def __init__(self, parent=None):
@@ -298,160 +300,161 @@ class ConfigManagerUI(QDialog):
 
     def _apply_style(self):
         """Apply modern styling to the dialog."""
-        self.setStyleSheet("""
-            QDialog {
-                background: #121212;
-            }
-            QGroupBox {
+        C = _C()
+        self.setStyleSheet(f"""
+            QDialog {{
+                background: {C.BG_DARK};
+            }}
+            QGroupBox {{
                 font-weight: 600;
                 font-size: 13px;
-                border: 2px solid #333;
+                border: 2px solid {C.BORDER};
                 border-radius: 10px;
                 margin-top: 16px;
                 padding: 16px 12px 12px 12px;
-                background: #1a1a1a;
-            }
-            QGroupBox::title {
+                background: {C.BG_SECONDARY};
+            }}
+            QGroupBox::title {{
                 subcontrol-origin: margin;
                 left: 14px;
                 padding: 0 10px;
-                color: #4C8BF5;
-            }
-            QLabel {
-                color: #EAEAEA;
+                color: {C.PRIMARY};
+            }}
+            QLabel {{
+                color: {C.TEXT_PRIMARY};
                 font-size: 13px;
-            }
-            QLineEdit {
+            }}
+            QLineEdit {{
                 padding: 10px 12px;
-                border: 2px solid #333;
+                border: 2px solid {C.BORDER};
                 border-radius: 8px;
-                background: #1F1F1F;
-                color: #EAEAEA;
+                background: {C.BG_TERTIARY};
+                color: {C.TEXT_PRIMARY};
                 font-size: 13px;
-                selection-background-color: #4C8BF5;
-            }
-            QLineEdit:focus {
-                border-color: #4C8BF5;
-                background: #252525;
-            }
-            QLineEdit::placeholder {
-                color: #666;
-            }
-            QComboBox {
+                selection-background-color: {C.PRIMARY_MUTED};
+            }}
+            QLineEdit:focus {{
+                border-color: {C.BORDER_FOCUS};
+                background: {C.BG_HOVER};
+            }}
+            QLineEdit::placeholder {{
+                color: {C.TEXT_TERTIARY};
+            }}
+            QComboBox {{
                 padding: 10px 12px;
-                border: 2px solid #333;
+                border: 2px solid {C.BORDER};
                 border-radius: 8px;
-                background: #1F1F1F;
-                color: #EAEAEA;
+                background: {C.BG_TERTIARY};
+                color: {C.TEXT_PRIMARY};
                 font-size: 13px;
                 min-height: 20px;
-            }
-            QComboBox:focus {
-                border-color: #4C8BF5;
-            }
-            QComboBox::drop-down {
+            }}
+            QComboBox:focus {{
+                border-color: {C.BORDER_FOCUS};
+            }}
+            QComboBox::drop-down {{
                 border: none;
                 width: 28px;
                 background: transparent;
-            }
-            QComboBox::down-arrow {
+            }}
+            QComboBox::down-arrow {{
                 image: none;
                 border-left: 5px solid transparent;
                 border-right: 5px solid transparent;
-                border-top: 6px solid #888;
+                border-top: 6px solid {C.TEXT_SECONDARY};
                 margin-right: 8px;
-            }
-            QComboBox QAbstractItemView {
-                background: #1F1F1F;
-                border: 1px solid #333;
+            }}
+            QComboBox QAbstractItemView {{
+                background: {C.BG_TERTIARY};
+                border: 1px solid {C.BORDER};
                 border-radius: 6px;
-                selection-background-color: #4C8BF5;
-                color: #EAEAEA;
+                selection-background-color: {C.PRIMARY_MUTED};
+                color: {C.TEXT_PRIMARY};
                 padding: 4px;
-            }
-            QPushButton {
+            }}
+            QPushButton {{
                 padding: 12px 20px;
                 border-radius: 8px;
-                border: 2px solid #333;
-                background: #1F1F1F;
-                color: #EAEAEA;
+                border: 2px solid {C.BORDER};
+                background: {C.BG_TERTIARY};
+                color: {C.TEXT_PRIMARY};
                 font-size: 13px;
                 font-weight: 500;
                 min-height: 20px;
-            }
-            QPushButton:hover {
-                background: #2A2A2A;
-                border-color: #444;
-            }
-            QPushButton:pressed {
-                background: #333;
-            }
-            QPushButton:disabled {
-                background: #1A1A1A;
-                color: #555;
-                border-color: #2A2A2A;
-            }
-            QPushButton[class="primary"] {
-                background: #4C8BF5;
+            }}
+            QPushButton:hover {{
+                background: {C.BG_HOVER};
+                border-color: {C.TEXT_TERTIARY};
+            }}
+            QPushButton:pressed {{
+                background: {C.BG_SECONDARY};
+            }}
+            QPushButton:disabled {{
+                background: {C.BG_SECONDARY};
+                color: {C.TEXT_TERTIARY};
+                border-color: {C.BORDER_MUTED};
+            }}
+            QPushButton[class="primary"] {{
+                background: {C.PRIMARY};
                 color: white;
                 border: none;
                 font-weight: 600;
-            }
-            QPushButton[class="primary"]:hover {
-                background: #5B97F7;
-            }
-            QPushButton[class="primary"]:pressed {
-                background: #3B78E5;
-            }
-            QPushButton[class="success"] {
-                background: #28a745;
+            }}
+            QPushButton[class="primary"]:hover {{
+                background: {C.PRIMARY_HOVER};
+            }}
+            QPushButton[class="primary"]:pressed {{
+                background: {C.PRIMARY_PRESSED};
+            }}
+            QPushButton[class="success"] {{
+                background: {C.SUCCESS};
                 color: white;
                 border: none;
                 font-weight: 600;
-            }
-            QPushButton[class="success"]:hover {
-                background: #218838;
-            }
-            QListWidget {
-                background: #121212;
-                border: 2px solid #333;
+            }}
+            QPushButton[class="success"]:hover {{
+                background: {C.SUCCESS_HOVER};
+            }}
+            QListWidget {{
+                background: {C.BG_DARK};
+                border: 2px solid {C.BORDER};
                 border-radius: 8px;
                 padding: 6px;
                 outline: none;
-            }
-            QListWidget::item {
+            }}
+            QListWidget::item {{
                 padding: 10px 12px;
                 border-radius: 6px;
                 margin: 3px 0;
-                color: #EAEAEA;
-            }
-            QListWidget::item:hover {
-                background: #2A2A2A;
-            }
-            QListWidget::item:selected {
-                background: #3A5A8A;
-                color: white;
-            }
-            QScrollArea {
+                color: {C.TEXT_PRIMARY};
+            }}
+            QListWidget::item:hover {{
+                background: {C.BG_HOVER};
+            }}
+            QListWidget::item:selected {{
+                background: {C.PRIMARY_MUTED};
+                color: {C.PRIMARY};
+            }}
+            QScrollArea {{
                 border: none;
                 background: transparent;
-            }
-            QScrollBar:vertical {
-                background: #1A1A1A;
+            }}
+            QScrollBar:vertical {{
+                background: {C.BG_SECONDARY};
                 width: 10px;
                 border-radius: 5px;
-            }
-            QScrollBar::handle:vertical {
-                background: #444;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {C.BORDER};
                 border-radius: 5px;
                 min-height: 30px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #555;
-            }
-            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {C.TEXT_TERTIARY};
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0;
-            }
+            }}
         """)
 
     def _build_ui(self):
@@ -472,11 +475,11 @@ class ConfigManagerUI(QDialog):
         """Build the recent configurations panel."""
         panel = QFrame()
         panel.setObjectName("recentPanel")
-        panel.setStyleSheet("""
-            QFrame#recentPanel {
-                background: #1A1A1A;
+        panel.setStyleSheet(f"""
+            QFrame#recentPanel {{
+                background: {_C().BG_SECONDARY};
                 border-radius: 8px;
-            }
+            }}
         """)
 
         layout = QVBoxLayout(panel)
@@ -486,29 +489,31 @@ class ConfigManagerUI(QDialog):
         # Title
         title = QLabel("Recent Configurations")
         title.setFont(QFont("Segoe UI", 11, QFont.Bold))
-        title.setStyleSheet("color: #AAAAAA;")
+        title.setStyleSheet(f"color: {_C().TEXT_SECONDARY};")
         layout.addWidget(title)
 
         # Recent list
         self.recent_list = QListWidget()
-        self.recent_list.setStyleSheet("""
-            QListWidget {
-                background: #121212;
-                border: 1px solid #333;
+        self.recent_list.setStyleSheet(f"""
+            QListWidget {{
+                background: {_C().BG_DARK};
+                border: 1px solid {_C().BORDER};
                 border-radius: 6px;
                 padding: 4px;
-            }
-            QListWidget::item {
+            }}
+            QListWidget::item {{
                 padding: 8px;
                 border-radius: 4px;
                 margin: 2px 0;
-            }
-            QListWidget::item:hover {
-                background: #2A2A2A;
-            }
-            QListWidget::item:selected {
-                background: #3A5A8A;
-            }
+                color: {_C().TEXT_PRIMARY};
+            }}
+            QListWidget::item:hover {{
+                background: {_C().BG_HOVER};
+            }}
+            QListWidget::item:selected {{
+                background: {_C().PRIMARY_MUTED};
+                color: {_C().PRIMARY};
+            }}
         """)
         self.recent_list.itemDoubleClicked.connect(self._load_recent_item)
         self._populate_recent_list()
@@ -624,16 +629,16 @@ class ConfigManagerUI(QDialog):
 
         # Status info
         self.status_frame = QFrame()
-        self.status_frame.setStyleSheet("""
-            QFrame {
-                background: #1A1A1A;
+        self.status_frame.setStyleSheet(f"""
+            QFrame {{
+                background: {_C().BG_SECONDARY};
                 border-radius: 6px;
                 padding: 8px;
-            }
+            }}
         """)
         status_layout = QHBoxLayout(self.status_frame)
         self.lbl_status = QLabel("No configuration loaded")
-        self.lbl_status.setStyleSheet("color: #888;")
+        self.lbl_status.setStyleSheet(f"color: {_C().TEXT_TERTIARY};")
         status_layout.addWidget(self.lbl_status)
         form_layout.addWidget(self.status_frame)
 
