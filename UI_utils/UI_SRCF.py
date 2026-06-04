@@ -504,7 +504,11 @@ class SRCF_UI(QDialog):
     # ============================================================
 
     def _load_calibration(self):
-        """Load Cal['Wvn'] from .mat file."""
+        """Load Cal['Wvn'] from .mat file.
+
+        Accepts files where the struct is saved under any key name (e.g. 'Cal',
+        'Cal_HW', etc.) as long as it contains a 'Wvn' field.
+        """
         fp, _ = QFileDialog.getOpenFileName(
             self, "Select X Axis Calibration File",
             "", "MAT files (*.mat);;All Files (*)"
@@ -514,23 +518,36 @@ class SRCF_UI(QDialog):
 
         try:
             mat = loadmat(fp)
-            if "Cal" in mat and isinstance(mat["Cal"], np.ndarray):
-                cal_struct = mat["Cal"]
-                if "Wvn" in cal_struct.dtype.names:
-                    self.wvn = cal_struct["Wvn"][0, 0].flatten().astype(float)
-                    if "Wavelength" in cal_struct.dtype.names:
-                        self.laser_wavelength = float(cal_struct["Wavelength"][0, 0].flatten()[0])
-                    self.file_wvn_mat = fp
-                    self.result = "WvnUploaded"
-                    self.lbl_calib_status.setText(f"✓ Loaded ({len(self.wvn)} points)")
-                    self.lbl_calib_status.setStyleSheet(f"color: {_C().SUCCESS};")
-                    self.status_bar.showMessage(
-                        f"Calibration loaded: {len(self.wvn)} points, laser {self.laser_wavelength:.1f} nm"
-                    )
-                    return True
 
-            QMessageBox.warning(self, "Invalid File", "Missing Cal['Wvn'] in .mat file.")
-            return False
+            # Find the first structured array that contains a 'Wvn' field,
+            # regardless of the top-level key name used when saving.
+            cal_struct = None
+            for key, val in mat.items():
+                if key.startswith("_"):
+                    continue
+                if (isinstance(val, np.ndarray) and val.dtype.names
+                        and "Wvn" in val.dtype.names):
+                    cal_struct = val
+                    break
+
+            if cal_struct is None:
+                QMessageBox.warning(self, "Invalid File",
+                                    "No calibration struct with 'Wvn' field found in .mat file.")
+                return False
+
+            self.wvn = cal_struct["Wvn"][0, 0].flatten().astype(float)
+            if "Wavelength" in cal_struct.dtype.names:
+                # Wavelength may be a scalar or a multi-element array;
+                # always take the first element as the laser wavelength (nm).
+                self.laser_wavelength = float(cal_struct["Wavelength"][0, 0].flatten()[0])
+            self.file_wvn_mat = fp
+            self.result = "WvnUploaded"
+            self.lbl_calib_status.setText(f"✓ Loaded ({len(self.wvn)} points)")
+            self.lbl_calib_status.setStyleSheet(f"color: {_C().SUCCESS};")
+            self.status_bar.showMessage(
+                f"Calibration loaded: {len(self.wvn)} points, laser {self.laser_wavelength:.1f} nm"
+            )
+            return True
 
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))

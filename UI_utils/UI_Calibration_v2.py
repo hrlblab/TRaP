@@ -155,15 +155,11 @@ class SpectrumCanvas(FigureCanvas):
         self.draw_idle()
 
     def _init_crosshair(self):
-        """Initialize crosshair lines after spectrum is loaded."""
-        # Remove old crosshair if exists
-        if self.crosshair_v is not None:
-            self.crosshair_v.remove()
-        if self.crosshair_h is not None:
-            self.crosshair_h.remove()
-        if self.coord_text is not None:
-            self.coord_text.remove()
+        """Initialize crosshair lines after spectrum is loaded.
 
+        ax.clear() in load_spectrum() already detaches old artists; references
+        are nullified there, so we just create new ones here.
+        """
         # Create crosshair lines (initially invisible)
         self.crosshair_v = self.ax.axvline(x=0, color=_C().WARNING, linewidth=1, linestyle='--', alpha=0.8, visible=False)
         self.crosshair_h = self.ax.axhline(y=0, color=_C().WARNING, linewidth=1, linestyle='--', alpha=0.8, visible=False)
@@ -189,6 +185,14 @@ class SpectrumCanvas(FigureCanvas):
         else:
             self.normalized_spectrum = self.spectrum.copy()
 
+        # Nullify crosshair references and clear peaks BEFORE ax.clear(), so
+        # _init_crosshair() doesn't try to .remove() artists already detached
+        # by ax.clear() (which would raise "Failed to remove artist").
+        self.crosshair_v = None
+        self.crosshair_h = None
+        self.coord_text = None
+        self.selected_points = []
+
         fs_title, fs_label, _, _ = self._font_sizes()
         self.ax.clear()
         self._style_axis()
@@ -197,10 +201,7 @@ class SpectrumCanvas(FigureCanvas):
         self.ax.set_xlabel("Pixel", fontsize=fs_label, color=_C().TEXT_SECONDARY)
         self.ax.set_ylabel("Normalized Intensity", fontsize=fs_label, color=_C().TEXT_SECONDARY)
 
-        # Initialize crosshair
         self._init_crosshair()
-
-        self.selected_points = []
         self.draw()
 
     def set_max_points(self, max_points: int):

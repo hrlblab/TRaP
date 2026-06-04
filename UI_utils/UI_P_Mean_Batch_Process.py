@@ -42,6 +42,14 @@ def _C(): return get_current_colors()
 VALID_DENOISE   = {"Savitzky-Golay", "Moving Average", "Median Filter", "None"}
 VALID_NORMALIZE = {"Mean", "Max", "Area"}
 
+# Default truncation range for each Raman Shift Range mode.
+# "Custom" is intentionally absent — don't overwrite user's values.
+RANGE_DEFAULTS = {
+    "Fingerprint": (900,  1800),
+    "High WVN":    (2000, 3200),
+    "Full Range":  (100,  4000),
+}
+
 def default_config() -> dict:
     """Return default configuration."""
     return {
@@ -456,6 +464,13 @@ class BatchPMeanUI(QMainWindow):
         self.config, _ = load_config_file(self.config_path)
         self.config_modified = False
         self.worker = None
+
+        # Apply Start/Stop defaults from config's Raman Shift Range (not for Custom).
+        raman_range = self.config_manager.params.get("Raman Shift Range", "")
+        if raman_range in RANGE_DEFAULTS:
+            start_default, stop_default = RANGE_DEFAULTS[raman_range]
+            self.config["Start"] = start_default
+            self.config["Stop"] = stop_default
 
         # Cached data for preview
         self.cached_wl_corr = None

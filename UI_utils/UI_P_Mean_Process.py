@@ -42,6 +42,14 @@ from utils.SpectralPreprocess import (
 
 config_manager = ConfigManager()
 
+# Default truncation range for each Raman Shift Range mode.
+# "Custom" is intentionally absent — don't overwrite user's values.
+RANGE_DEFAULTS = {
+    "Fingerprint": (900,  1800),
+    "High WVN":    (2000, 3200),
+    "Full Range":  (100,  4000),
+}
+
 
 def moving_average(data, window=5):
     return np.convolve(data, np.ones(window) / window, mode='same')
@@ -1323,6 +1331,14 @@ class P_Mean_Process_UI(QMainWindow):
 
             self.operations.append("LoadData")
             self.add_history("Load Data")
+
+            # Auto-fill Start/Stop from config's Raman Shift Range (not for Custom).
+            raman_range = config_manager.params.get("Raman Shift Range", "")
+            if raman_range in RANGE_DEFAULTS:
+                start_default, stop_default = RANGE_DEFAULTS[raman_range]
+                self.edit_start.setText(str(start_default))
+                self.edit_stop.setText(str(stop_default))
+
             self._update_plots(show_comparison=False)
             self._update_ui_state()
 

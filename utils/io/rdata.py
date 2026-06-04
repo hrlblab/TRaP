@@ -140,7 +140,22 @@ def getwlcorrfrompath(path):
 
 def getwvnfrompath(path):
     wvn_data = loadmat(path)
-    wvn = wvn_data['Cal']['Wvn'][0, 0]
+    # Accept any top-level key (e.g. 'Cal', 'Cal_HW') that is a
+    # structured array containing a 'Wvn' field.
+    cal_struct = wvn_data.get('Cal')
+    if cal_struct is None or not (hasattr(cal_struct, 'dtype') and
+                                   cal_struct.dtype.names and
+                                   'Wvn' in cal_struct.dtype.names):
+        for key, val in wvn_data.items():
+            if key.startswith('_'):
+                continue
+            if (isinstance(val, np.ndarray) and val.dtype.names
+                    and 'Wvn' in val.dtype.names):
+                cal_struct = val
+                break
+    if cal_struct is None:
+        raise ValueError(f"No calibration struct with 'Wvn' field found in {path}")
+    wvn = cal_struct['Wvn'][0, 0]
     return np.array(wvn, dtype=np.float64)
 
 
