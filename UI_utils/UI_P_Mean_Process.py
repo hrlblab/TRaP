@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
     QComboBox, QListWidget, QGroupBox, QFormLayout, QSplitter,
     QProgressBar, QFrame, QSizePolicy, QScrollArea, QCheckBox
 )
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QFont
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -39,6 +39,7 @@ from utils.SpectralPreprocess import (
     SpectralResponseCorrection, subtractBaseline,
     FluorescenceBackgroundSubtraction, Normalize
 )
+from utils.ProcessingPipeline import run_pipeline
 
 config_manager = ConfigManager()
 
@@ -616,6 +617,16 @@ class P_Mean_Process_UI(QMainWindow):
 
         self._update_denoise_visibility()
 
+        # ---- Live preview wiring (debounced) ----
+        # A single-shot timer coalesces rapid edits: each parameter change
+        # (re)starts it, and only after a short idle does _run_preview() replay
+        # the whole pipeline from raw data, refreshing all steps at once.
+        self._preview_timer = QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(300)  # ms
+        self._preview_timer.timeout.connect(self._run_preview)
+        self._wire_live_preview()
+
         # Config Group (build here, added to layout after files+params)
         config_group = QGroupBox("Configuration")
         config_layout = QHBoxLayout(config_group)
@@ -881,25 +892,94 @@ class P_Mean_Process_UI(QMainWindow):
         self.history_list.addItem(f"[{state['timestamp']}] {op_name}")
         self.history_list.scrollToBottom()
 
+    def _gather_config(self):
+        """Collect all pipeline parameters from the UI into a config dict.
+
+        Uses the same 15-key schema as batch processing, so the config maps
+        directly onto run_pipeline(). Raises ValueError/TypeError on invalid
+        input (caller decides how to handle).
+        """
+        return {
+            "Start": float(self.edit_start.text()),
+            "Stop": float(self.edit_stop.text()),
+            "Polyorder": int(self.edit_polyorder.text()),
+            "FBSMaxIter": int(self.edit_fbs_maxiter.text()),
+            "FBSExclude": self.edit_fbs_exclude.text().strip(),
+            "NormalizeMethod": self.combo_norm.currentText(),
+            "DenoiseMethod": self.combo_denoise.currentText(),
+            "BinWidth": float(self.edit_binwidth.text()),
+            "SGorder": int(self.edit_sgorder.text()),
+            "SGframe": int(self.edit_sgframe.text()),
+            "MAWindow": int(self.edit_mawindow.text()),
+            "MedianKernel": int(self.edit_mediank.text()),
+            "Truncate2Enabled": self.chk_truncate2.isChecked(),
+            "Start2": float(self.edit_start2.text()),
+            "Stop2": float(self.edit_stop2.text()),
+        }
+
+    def _wire_live_preview(self):
+        """Connect all parameter widgets to the debounced live-preview trigger.
+
+        Text fields use editingFinished (fires on Enter/focus-out, i.e. input
+        completion — no button press needed); combos/checkbox fire on change.
+        Every signal just (re)starts the debounce timer via _schedule_preview.
+        """
+        line_edits = [
+            self.edit_start, self.edit_stop, self.edit_binwidth,
+            self.edit_polyorder, self.edit_fbs_maxiter, self.edit_fbs_exclude,
+            self.edit_sgorder, self.edit_sgframe, self.edit_mawindow,
+            self.edit_mediank, self.edit_start2, self.edit_stop2,
+        ]
+        for w in line_edits:
+            w.editingFinished.connect(self._schedule_preview)
+        self.combo_norm.currentIndexChanged.connect(self._schedule_preview)
+        self.combo_denoise.currentIndexChanged.connect(self._schedule_preview)
+        self.chk_truncate2.stateChanged.connect(self._schedule_preview)
+
+    def _schedule_preview(self, *args):
+        """(Re)start the debounce timer so the preview runs once edits settle."""
+        # Only bother once real data is loaded; the initial rawSpect is a dummy
+        # placeholder, so gate on data_file to avoid running on it.
+        if not self.data_file:
+            return
+        self._preview_timer.start()
+
+    def _run_preview(self):
+        """Replay the whole pipeline from raw data and refresh the plot.
+
+        This is the live-preview entry point: it re-runs the entire chain on the
+        untouched raw spectrum, so any parameter change refreshes both the
+        intermediate and final results at once. Safe to call repeatedly; it does
+        not mutate rawSpect/wvnFull/wlCorr. Invalid/incomplete parameters during
+        editing are silently ignored (no popup) so typing does not spam errors.
+        """
+        if not self.data_file or self.rawSpect is None or self.rawSpect.size == 0:
+            return
+        try:
+            config = self._gather_config()
+        except Exception:
+            return  # Incomplete input mid-edit; wait for a valid state
+        try:
+            new_wvn, finalSpect = run_pipeline(
+                self.rawSpect, self.wlCorr, self.wvnFull, config,
+                skip_wl_correction=False,
+                skip_baseline=self._is_renishaw_system(),
+            )
+        except Exception as e:
+            self.lbl_status.setText(f"Preview error: {e}")
+            return
+        # Show raw (Before) vs fully processed (After)
+        self.previous_spect = self.rawSpect
+        self.previous_wvn = self.wvnFull
+        self.current_spect = finalSpect
+        self.current_wvn = new_wvn
+        self._update_plots()
+        self.lbl_status.setText("Live preview updated (full pipeline replayed).")
+
     def on_save_config(self):
         """Save configuration to JSON file."""
-        config = {}
         try:
-            config["Start"] = float(self.edit_start.text())
-            config["Stop"] = float(self.edit_stop.text())
-            config["Polyorder"] = int(self.edit_polyorder.text())
-            config["FBSMaxIter"] = int(self.edit_fbs_maxiter.text())
-            config["FBSExclude"] = self.edit_fbs_exclude.text().strip()
-            config["NormalizeMethod"] = self.combo_norm.currentText()
-            config["DenoiseMethod"] = self.combo_denoise.currentText()
-            config["BinWidth"] = float(self.edit_binwidth.text())
-            config["SGorder"] = int(self.edit_sgorder.text())
-            config["SGframe"] = int(self.edit_sgframe.text())
-            config["MAWindow"] = int(self.edit_mawindow.text())
-            config["MedianKernel"] = int(self.edit_mediank.text())
-            config["Truncate2Enabled"] = self.chk_truncate2.isChecked()
-            config["Start2"] = float(self.edit_start2.text())
-            config["Stop2"] = float(self.edit_stop2.text())
+            config = self._gather_config()
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Parameter error: {e}")
             return

@@ -130,6 +130,16 @@ Output: `dist/TRaP/TRaP.exe`
 
 ## Changelog
 
+### v1.0.3 — 2026-07-06
+
+**New Features**
+- **Real-time processing preview**: In single-spectrum processing, changing any parameter now re-runs the entire pipeline from the raw data and refreshes the result automatically — no button press needed. Because the whole chain is replayed from the untouched raw spectrum, every preceding and following step updates together. Edits are debounced (300 ms) so rapid typing does not thrash the computation.
+
+**Refactor**
+- **Unified pipeline module**: The P-Mean preprocessing chain now lives in a single source of truth, `utils/ProcessingPipeline.py` (`run_pipeline()`), shared by both single-spectrum and batch processing. This guarantees interactive preview and batch output stay byte-for-byte identical and removes ~80 lines of duplicated logic from the batch UI.
+
+---
+
 ### v1.0.2 — 2026-06-04
 
 **Bug Fixes**
