@@ -454,7 +454,8 @@ def animate_step_change(widget: QWidget, direction: str = "right"):
 from UI_utils.UI_Config_Manager_v2 import ConfigManagerUI, ConfigManager
 from UI_utils.UI_SRCF import SRCF_UI
 # from UI_utils.UI_Calibration import WaveformSelectionUI  # Old calibration UI
-from UI_utils.UI_Calibration_v2 import CalibrationUI  # New calibration UI with library selection
+# from UI_utils.UI_Calibration_v2 import CalibrationUI  # v2: library-checkbox calibration UI
+from UI_utils.UI_Calibration_v3 import CalibrationUIV3  # v3: three-panel reference-spectrum pairing UI
 from UI_utils.UI_P_Mean_Process import P_Mean_Process_UI
 from UI_utils.UI_P_Mean_Batch_Process import BatchPMeanUI
 
@@ -801,8 +802,12 @@ class SystemSelectWizard(QWidget):
             animate_step_change(self)
             return
 
-        # Use new CalibrationUI dialog
-        cal_dlg = CalibrationUI(self)
+        # Use v3 calibration dialog (three-panel reference-spectrum pairing)
+        cal_dlg = CalibrationUIV3(
+            self,
+            exc_wavelength=self.config.params.get("Exc Wavelength", 785),
+            raman_range=self.config.params.get("Raman Shift Range"),
+        )
         result = cal_dlg.exec_()
 
         if result == QDialog.Accepted:

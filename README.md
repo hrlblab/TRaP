@@ -130,6 +130,17 @@ Output: `dist/TRaP/TRaP.exe`
 
 ## Changelog
 
+### v1.0.4 — 2026-07-10
+
+**New Features**
+- **Redesigned X-axis calibration (v3)**: The calibration step now shows three parts at once — your input spectrum (top) and the library reference spectrum (bottom) stacked for visual pattern comparison, plus a reference peak library on the right. Commonly-used peaks are always marked; all peaks are selectable. Pairing is explicit: activate a reference peak (click it on the reference spectrum or the library list), then click the matching peak on your input spectrum to form one (reference wavenumber ↔ input pixel) pair. A moving crosshair with a live coordinate readout tracks the cursor on both spectra.
+- **Excel-backed reference data**: Reference spectra and peak lists (with per-peak spectral indices) are loaded from `data/TRaP Xcal Data.xlsx`, covering Ne-Ar (785/830 nm) and Acetaminophen (Fingerprint / High Wavenumber). The correct reference is auto-selected from the configured excitation wavelength and Raman shift range, with a dropdown to override.
+
+**Notes**
+- The v3 calibration UI (`UI_Calibration_v3.py`, `Calibration_v3.py`, `XcalReference.py`) reuses the v2 calibration math unchanged. The previous v2 UI is retained in the codebase.
+
+---
+
 ### v1.0.3 — 2026-07-06
 
 **New Features**
