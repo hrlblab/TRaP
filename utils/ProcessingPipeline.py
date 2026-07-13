@@ -43,7 +43,8 @@ def parse_exclude_mask(wvn: np.ndarray, exclude_text: str):
 
 
 def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config: dict,
-                 skip_wl_correction: bool = False, skip_baseline: bool = False):
+                 skip_wl_correction: bool = False, skip_baseline: bool = False,
+                 return_prenorm: bool = False):
     """Run the full P-Mean preprocessing pipeline on raw data.
 
     This is a *pure* function: it does not mutate its inputs, so it is safe to
@@ -56,9 +57,14 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
         config: Processing configuration
         skip_wl_correction: If True, skip spectral response correction
         skip_baseline: If True, skip dark baseline subtraction (Renishaw/microscope)
+        return_prenorm: If True, also return the pre-normalization spectrum (the
+            fully processed result of every step *except* normalization).
 
     Returns:
-        (new_wvn, finalSpect): processed wavenumber axis and spectrum
+        (new_wvn, finalSpect) by default, or
+        (new_wvn, finalSpect, prenormSpect) when return_prenorm=True — where
+        finalSpect is normalized and prenormSpect is the same spectrum before
+        the normalization step.
     """
     # 1) Baseline, response correction, cosmic ray removal
     spect = data if skip_baseline else subtractBaseline(data)
@@ -110,9 +116,14 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
             new_wvn, finalSpect = Truncate(start2, stop2, new_wvn, finalSpect)
 
     # 7) Normalization
+    #    Keep the pre-normalization spectrum so callers can save both the
+    #    normalized result and the raw-scale (non-normalized) intensities.
+    prenorm_spect = finalSpect
     norm_method = str(config.get("NormalizeMethod", "Mean")).lower()
-    finalSpect = Normalize(finalSpect, method=norm_method)
+    finalSpect = Normalize(prenorm_spect, method=norm_method)
 
+    if return_prenorm:
+        return new_wvn, finalSpect, prenorm_spect
     return new_wvn, finalSpect
 
 

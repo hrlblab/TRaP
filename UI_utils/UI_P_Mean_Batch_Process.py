@@ -234,10 +234,10 @@ class BatchWorker(QThread):
                         raw_spec = arr.ravel()
                         file_wvn = self.wvn  # fallback to provided wvn
                     # Skip dark baseline for Renishaw/microscope; apply WL correction if provided
-                    new_wvn, processed_spec = p_mean_process(
+                    new_wvn, processed_spec, prenorm_spec = p_mean_process(
                         raw_spec, self.wl_corr, file_wvn, self.config,
                         skip_wl_correction=(self.wl_corr is None),
-                        skip_baseline=True
+                        skip_baseline=True, return_prenorm=True
                     )
                 else:
                     # Non-Renishaw: single column intensity data
@@ -248,16 +248,17 @@ class BatchWorker(QThread):
                             raw_spec = arr.mean(axis=1)
                     else:
                         raw_spec = arr.ravel()
-                    new_wvn, processed_spec = p_mean_process(
-                        raw_spec, self.wl_corr, self.wvn, self.config, skip_wl_correction=False
+                    new_wvn, processed_spec, prenorm_spec = p_mean_process(
+                        raw_spec, self.wl_corr, self.wvn, self.config,
+                        skip_wl_correction=False, return_prenorm=True
                     )
-                output_data = np.column_stack((new_wvn, processed_spec))
+                output_data = np.column_stack((new_wvn, processed_spec, prenorm_spec))
 
                 prefix = os.path.basename(path)
                 out_path = wdata.save_data(
                     output_data, prefix=prefix, operations=ops_summary,
                     base_dir=self.output_folder, file_ext="txt",
-                    header="Wavenumber,SpectralIntensity"
+                    header="Wavenumber,SpectralIntensity,SpectralIntensity_NoNorm"
                 )
                 processed_files.append(out_path)
                 self.log.emit(f"[OK] {os.path.basename(path)} -> {os.path.basename(out_path)}", "success")

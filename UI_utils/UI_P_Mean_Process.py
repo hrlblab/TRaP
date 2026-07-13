@@ -1280,10 +1280,35 @@ class P_Mean_Process_UI(QMainWindow):
         if filepath:
             try:
                 wvn = self.current_wvn.reshape(-1, 1)
-                spect = self.current_spect.reshape(-1, 1)
-                data = np.hstack([wvn, spect])
+                norm_col = self.current_spect.reshape(-1, 1)
+
+                # Also save the non-normalized spectrum by replaying the pipeline
+                # from the raw data (same config that produced the current view).
+                prenorm_col = None
+                if (self.data_file and self.rawSpect is not None
+                        and getattr(self.rawSpect, "size", 0)):
+                    try:
+                        config = self._gather_config()
+                        nw, nspect, pspect = run_pipeline(
+                            self.rawSpect, self.wlCorr, self.wvnFull, config,
+                            skip_wl_correction=False,
+                            skip_baseline=self._is_renishaw_system(),
+                            return_prenorm=True,
+                        )
+                        if len(nw) == len(self.current_wvn):
+                            norm_col = nspect.reshape(-1, 1)
+                            prenorm_col = pspect.reshape(-1, 1)
+                    except Exception:
+                        prenorm_col = None  # fall back to normalized-only
+
+                if prenorm_col is not None:
+                    data = np.hstack([wvn, norm_col, prenorm_col])
+                    header = "Wavenumber,Intensity,Intensity_NoNorm"
+                else:
+                    data = np.hstack([wvn, norm_col])
+                    header = "Wavenumber,Intensity"
                 np.savetxt(filepath, data, delimiter=",",
-                           header="Wavenumber,Intensity", comments='')
+                           header=header, comments='')
                 self.lbl_status.setText(f"Data saved: {filepath}")
             except Exception as e:
                 QMessageBox.warning(self, "Error", f"Failed to save: {e}")

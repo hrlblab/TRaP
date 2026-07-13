@@ -130,6 +130,16 @@ Output: `dist/TRaP/TRaP.exe`
 
 ## Changelog
 
+### v1.0.5 — 2026-07-13
+
+**New Features**
+- **Save non-normalized intensities alongside normalized**: Processed spectra are now saved with an extra `Intensity_NoNorm` / `SpectralIntensity_NoNorm` column holding the fully processed spectrum *before* the normalization step. This applies to both single-spectrum "Save Data" (`Wavenumber, Intensity, Intensity_NoNorm`) and batch output files (`Wavenumber, SpectralIntensity, SpectralIntensity_NoNorm`). On-screen preview and comparison plots are unchanged (still normalized).
+
+**Internal**
+- `utils/ProcessingPipeline.py` `run_pipeline()` gains a `return_prenorm` flag that additionally returns the pre-normalization spectrum. The default 2-tuple return is unchanged, so existing callers are unaffected.
+
+---
+
 ### v1.0.4 — 2026-07-10
 
 **New Features**
