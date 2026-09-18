@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### 修复标定在 NumPy 2 上必然失败（Richard 反馈）
+
+- **现象**：`Calibration failed: setting an array element with a sequence`
+- **与数据无关**。`lsqpolyfit` 返回的 `Coefficients` 是 `(order+1, 1)` 的**列向量**，所以 `accuratepeak2` 里 `p['Coefficients'][1]` 拿到的是长度为 1 的数组而不是标量，随后 `subx[i] = ...` 把数组塞进标量位置。NumPy 1.25 起这是 DeprecationWarning，**NumPy 2.0 起直接抛 `ValueError`** —— 报错原文就是这句。任何标定在 NumPy 2 上都会失败，不只是 Richard 的数据
+- **修复在 `accuratePeak.py`**：取系数时 `.ravel()` 成一维。不能改 `lsqpolyfit` 的返回形状 —— `lsqpolyval` 依赖它是二维（用了 `p.shape[1]` 和 `p[:, k]`），而所有其他调用方都是把整个 `P` 传给 `lsqpolyval`
+- **顺带修掉两个同一函数里的缺陷**
+  - **边缘峰崩溃**：选在光谱首尾附近的峰，拟合窗口会越界索引（1-based 位置 / 0-based 存储），抛 `IndexError`。现在窗口按数组边界裁剪
+  - **抛飞的顶点**：窗口接近平坦时抛物线顶点会落到窗口之外 —— 实测某个 pixel 10 的峰被"精修"到 26.86，这种坏点直接进多项式拟合会污染整条波数轴。现在顶点落在拟合窗口之外或非有限时，退回原始整数峰位
+  - `n` 参数传 numpy 标量时会走进数组分支并在 0 维数组上崩溃，现在按维度判断
+
+
 - **samples/bin 读数改报最差值**（评审反馈）。原先算的是 `BinWidth / 中位间距`，但轴是非均匀的，是否有 bin 饿死取决于**最稀疏**处，即最大间距。中位数会漏报：BinWidth=1.10 时中位给出 1.01（看似安全）而实际有 21 个空 bin，1.15 时中位 1.06 而实际有 6 个。改用 `BinWidth / 最大间距` 后这两处都能正确预警，并与"把 BinWidth 设到最大间距以上"的既有建议一致。读数同时显示中位值作为参考
 - 需要说明的是，最小值是**充分条件**而非精确预测：min ≥ 1 保证没有空 bin，但 min 略小于 1 时（本例 1.20–1.214）最大间隙未必正好跨过 bin 边界，会有保守的误报。精确数量由读数里的实际空 bin 计数给出
 
