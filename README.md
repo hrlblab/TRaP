@@ -130,7 +130,7 @@ Output: `dist/TRaP/TRaP.exe`
 
 ## Changelog
 
-### Unreleased — 2026-09-18
+### v1.0.7 — 2026-09-18
 
 **New Features**
 - **Three binning methods** (`utils/Resample.py`), selected by `BinMethod`, default `Average`:
