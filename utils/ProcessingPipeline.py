@@ -16,8 +16,19 @@ change simply calls run_pipeline() again on the untouched raw data, which
 re-runs the whole chain and refreshes every intermediate/final result.
 """
 
+import warnings
+
 import numpy as np
 from scipy.signal import medfilt
+
+
+class BinWidthTooFine(UserWarning):
+    """Raised as a warning when BinWidth is finer than the detector's sampling.
+
+    Bins that catch no sample are interpolated from their neighbours to keep the
+    output axis uniform, so the result is usable — but those points are not
+    measured, and the caller should know.
+    """
 
 from utils.SpectralPreprocess import (
     Binning, Denoise, Truncate, CosmicRayRemoval,
@@ -121,7 +132,24 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
     wvn_trunc = wvn_trunc.flatten()
     spect_trunc = spect_trunc.flatten()
     binwidth = float(config.get("BinWidth", 3.5))
-    binned_spect, new_wvn = Binning(wvn_trunc[0], wvn_trunc[-1], wvn_trunc, spect_trunc, binwidth=binwidth)
+    binned_spect, new_wvn, bin_info = Binning(wvn_trunc[0], wvn_trunc[-1], wvn_trunc,
+                                              spect_trunc, binwidth=binwidth,
+                                              return_info=True)
+    if bin_info["starved"] and len(wvn_trunc) > 1:
+        # The requested bin width is finer than the detector samples, so some
+        # bins carry interpolated values rather than measured ones. Say so.
+        step = np.diff(wvn_trunc)
+        bin_info["max_native_step"] = float(step.max())
+        bin_info["median_native_step"] = float(np.median(step))
+        warnings.warn(
+            f"BinWidth {binwidth:g} cm-1 is finer than the data supports: "
+            f"{bin_info['n_filled']} of {bin_info['n_bins']} bins caught no sample "
+            f"and were interpolated. The axis spacing reaches "
+            f"{bin_info['max_native_step']:.3f} cm-1 (median "
+            f"{bin_info['median_native_step']:.3f}). Set BinWidth at or above the "
+            f"maximum spacing to bin only measured points.",
+            BinWidthTooFine, stacklevel=2
+        )
 
     # 4) Fluorescence background subtraction (with optional exclusion regions)
     polyorder = int(config.get("Polyorder", 7))

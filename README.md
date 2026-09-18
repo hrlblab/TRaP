@@ -132,6 +132,14 @@ Output: `dist/TRaP/TRaP.exe`
 
 ### Unreleased — 2026-09-18
 
+**Bug Fixes**
+- **Binning returned a non-uniform axis** (reported: "setting the bin width to 1 cm⁻¹, the saved axis is sometimes spaced by 1 cm⁻¹ and sometimes by 2"). `Binning()` dropped any bin that caught no sample. A grating samples uniformly in *wavelength*, so in wavenumber the spacing shrinks as wavenumber rises — 1.215 → 0.982 cm⁻¹ on the evaluation set, median 1.087. A 1.0 cm⁻¹ bin is finer than that across the whole 650–1700 window, so 88 of 1049 bins fell between two samples and were silently deleted, leaving the 1/2 cm⁻¹ alternating axis (654, 660, 666 … absent).
+  - Interior empty bins are now filled by interpolating their neighbours, so the output axis stays strictly uniform. Empty bins at the edges are still dropped — they lie outside the data's coverage and there is nothing on one side to interpolate from.
+  - `Binning()` accepts `return_info=True`, reporting how many bins were filled and how many edge bins were dropped.
+  - `run_pipeline()` raises a `BinWidthTooFine` warning when the requested width is finer than the data supports, naming the count and the actual maximum and median sampling step. The batch UI writes it to the processing log once per run.
+  - Effect on agreement with the reference pipeline: correlation improves (worst r 0.99881 → **0.99955**), because the Savitzky-Golay filter that follows works on sample index and now crosses equal spacings. Nominal nRMSE rises from 1.28% to 1.45%, but that is almost entirely a ~0.965 global gain; with the gain removed the residual falls to 0.44–0.73%. The gain comes from mean normalization being grid-dependent — the restored bins sit mostly in the low-wavenumber, low-signal region and pull the mean down. Peak positions and band ratios are unaffected.
+  - **Recommended usage**: set `BinWidth` at or above the axis's *maximum* sampling step (≥ 1.25 cm⁻¹ here) so every bin contains only measured points and no interpolation is needed.
+
 **New Features**
 - **Cosmic ray removal** (`utils/CosmicRay.py`): pipeline Step 3 is no longer a pass-through. Two complementary algorithms, chosen by whether a neighbouring acquisition exists.
   - **Whitaker–Hayes (2018)** — single spectrum. Modified Z-score of the first difference; differencing removes baseline and fluorescence, leaving spikes as extreme outliers against a robust MAD scale. Its discriminator is narrowness, so it needs real Raman bands to be comfortably wider than a strike.

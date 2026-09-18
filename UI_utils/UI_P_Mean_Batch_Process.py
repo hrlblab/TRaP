@@ -14,6 +14,7 @@ Features:
 import sys
 import os
 import json
+import warnings
 from datetime import datetime
 import numpy as np
 
@@ -29,7 +30,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from utils.io import wdata, rdata
-from utils.ProcessingPipeline import p_mean_process
+from utils.ProcessingPipeline import p_mean_process, BinWidthTooFine
 from utils.CosmicRay import VALID_COSMIC_METHODS as _VALID_COSMIC
 from UI_utils.UI_Config_Manager_v2 import ConfigManager
 from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
@@ -267,6 +268,7 @@ class BatchWorker(QThread):
                 "Li-Dai selected but the files are not marked as repeats of one "
                 "sample — falling back to Whitaker-Hayes per spectrum.", "warning")
         prev_raw = None
+        bin_warned = False
 
         total = len(self.data_files)
         for i, path in enumerate(self.data_files):
@@ -277,71 +279,78 @@ class BatchWorker(QThread):
             self.progress.emit(i + 1, total, os.path.basename(path))
 
             try:
-                if self.is_renishaw:
-                    data_df = rdata.read_txt_file(path)
-                else:
-                    data_df = rdata.load_spectrum_data(path)
-                if data_df is None:
-                    raise ValueError(f"Failed to read file: {path}")
-                if hasattr(data_df, "to_numpy"):
-                    arr = data_df.to_numpy()
-                else:
-                    arr = np.asarray(data_df)
-                arr = np.asarray(arr, dtype=np.float64)
+              with warnings.catch_warnings(record=True) as caught:
+                  warnings.simplefilter("always", BinWidthTooFine)
+                  if self.is_renishaw:
+                      data_df = rdata.read_txt_file(path)
+                  else:
+                      data_df = rdata.load_spectrum_data(path)
+                  if data_df is None:
+                      raise ValueError(f"Failed to read file: {path}")
+                  if hasattr(data_df, "to_numpy"):
+                      arr = data_df.to_numpy()
+                  else:
+                      arr = np.asarray(data_df)
+                  arr = np.asarray(arr, dtype=np.float64)
 
-                if self.is_renishaw:
-                    # Renishaw: data file contains [wavenumber, intensity]
-                    if arr.ndim == 2 and arr.shape[1] >= 2:
-                        # Sort ascending by wavenumber (Renishaw exports descending)
-                        sort_idx = np.argsort(arr[:, 0])
-                        file_wvn = arr[sort_idx, 0].flatten()
-                        raw_spec = arr[sort_idx, 1].flatten()
-                    else:
-                        raw_spec = arr.ravel()
-                        file_wvn = self.wvn  # fallback to provided wvn
-                    msn = self._msn_for(prev_raw, raw_spec, replicate_group)
-                    # Skip dark baseline for Renishaw/microscope; apply WL correction if provided
-                    new_wvn, processed_spec, prenorm_spec, cr_mask, cr_used = p_mean_process(
-                        raw_spec, self.wl_corr, file_wvn, self.config,
-                        skip_wl_correction=(self.wl_corr is None),
-                        skip_baseline=True, return_prenorm=True,
-                        msn_data=msn, return_cosmic=True
-                    )
-                else:
-                    # Non-Renishaw: single column intensity data
-                    if arr.ndim == 2:
-                        if arr.shape[1] == 1:
-                            raw_spec = arr.ravel()
-                        else:
-                            raw_spec = arr.mean(axis=1)
-                    else:
-                        raw_spec = arr.ravel()
-                    msn = self._msn_for(prev_raw, raw_spec, replicate_group)
-                    new_wvn, processed_spec, prenorm_spec, cr_mask, cr_used = p_mean_process(
-                        raw_spec, self.wl_corr, self.wvn, self.config,
-                        skip_wl_correction=False, return_prenorm=True,
-                        msn_data=msn, return_cosmic=True
-                    )
-                prev_raw = raw_spec
-                if cr_used != "None":
-                    n = int(cr_mask.sum())
-                    where = (", ".join(f"{v:.0f}" for v in np.asarray(file_wvn
-                             if self.is_renishaw else self.wvn).ravel()[cr_mask][:8])
-                             if n else "")
-                    self.log.emit(
-                        f"  {cr_used}: {n} point(s) replaced"
-                        + (f" near {where} cm-1" + (" ..." if n > 8 else "") if n else ""),
-                        "info" if n else "info")
-                output_data = np.column_stack((new_wvn, processed_spec, prenorm_spec))
+                  if self.is_renishaw:
+                      # Renishaw: data file contains [wavenumber, intensity]
+                      if arr.ndim == 2 and arr.shape[1] >= 2:
+                          # Sort ascending by wavenumber (Renishaw exports descending)
+                          sort_idx = np.argsort(arr[:, 0])
+                          file_wvn = arr[sort_idx, 0].flatten()
+                          raw_spec = arr[sort_idx, 1].flatten()
+                      else:
+                          raw_spec = arr.ravel()
+                          file_wvn = self.wvn  # fallback to provided wvn
+                      msn = self._msn_for(prev_raw, raw_spec, replicate_group)
+                      # Skip dark baseline for Renishaw/microscope; apply WL correction if provided
+                      new_wvn, processed_spec, prenorm_spec, cr_mask, cr_used = p_mean_process(
+                          raw_spec, self.wl_corr, file_wvn, self.config,
+                          skip_wl_correction=(self.wl_corr is None),
+                          skip_baseline=True, return_prenorm=True,
+                          msn_data=msn, return_cosmic=True
+                      )
+                  else:
+                      # Non-Renishaw: single column intensity data
+                      if arr.ndim == 2:
+                          if arr.shape[1] == 1:
+                              raw_spec = arr.ravel()
+                          else:
+                              raw_spec = arr.mean(axis=1)
+                      else:
+                          raw_spec = arr.ravel()
+                      msn = self._msn_for(prev_raw, raw_spec, replicate_group)
+                      new_wvn, processed_spec, prenorm_spec, cr_mask, cr_used = p_mean_process(
+                          raw_spec, self.wl_corr, self.wvn, self.config,
+                          skip_wl_correction=False, return_prenorm=True,
+                          msn_data=msn, return_cosmic=True
+                      )
+                  prev_raw = raw_spec
+                  if cr_used != "None":
+                      n = int(cr_mask.sum())
+                      where = (", ".join(f"{v:.0f}" for v in np.asarray(file_wvn
+                               if self.is_renishaw else self.wvn).ravel()[cr_mask][:8])
+                               if n else "")
+                      self.log.emit(
+                          f"  {cr_used}: {n} point(s) replaced"
+                          + (f" near {where} cm-1" + (" ..." if n > 8 else "") if n else ""),
+                          "info" if n else "info")
+                  output_data = np.column_stack((new_wvn, processed_spec, prenorm_spec))
 
-                prefix = os.path.basename(path)
-                out_path = wdata.save_data(
-                    output_data, prefix=prefix, operations=ops_summary,
-                    base_dir=self.output_folder, file_ext="txt",
-                    header="Wavenumber,SpectralIntensity,SpectralIntensity_NoNorm"
-                )
-                processed_files.append(out_path)
-                self.log.emit(f"[OK] {os.path.basename(path)} -> {os.path.basename(out_path)}", "success")
+                  prefix = os.path.basename(path)
+                  out_path = wdata.save_data(
+                      output_data, prefix=prefix, operations=ops_summary,
+                      base_dir=self.output_folder, file_ext="txt",
+                      header="Wavenumber,SpectralIntensity,SpectralIntensity_NoNorm"
+                  )
+                  processed_files.append(out_path)
+                  self.log.emit(f"[OK] {os.path.basename(path)} -> {os.path.basename(out_path)}", "success")
+                  if not bin_warned:
+                      for wmsg in caught:
+                          if issubclass(wmsg.category, BinWidthTooFine):
+                              self.log.emit(f"  {wmsg.message}", "warning")
+                              bin_warned = True   # same config every file; say it once
 
             except Exception as e:
                 fail_count += 1

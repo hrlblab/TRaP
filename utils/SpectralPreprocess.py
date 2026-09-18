@@ -110,7 +110,31 @@ def Truncate(start, stop, wvnFull, sprSpect):
 #             binSpect[k] = np.nan
 #     return binSpect, newWvn
 
-def Binning(start, stop, wvn, truncSpect, binwidth=3.5):
+def Binning(start, stop, wvn, truncSpect, binwidth=3.5, return_info=False):
+    """Rebin a spectrum onto a uniform wavenumber grid.
+
+    A bin narrower than the detector's local sample spacing can fall between two
+    samples and catch nothing. Such interior bins are filled by interpolating
+    their neighbours rather than dropped, because dropping them silently returns
+    a non-uniform axis — a 1.0 cm-1 request coming back with a mix of 1 and
+    2 cm-1 steps — which then misleads every downstream step that works on
+    sample index (Savitzky-Golay among them).
+
+    Empty bins at the very edges are still dropped: there is nothing on one side
+    to interpolate from, so they lie outside the data's actual coverage.
+
+    Args:
+        start, stop: Wavenumber range to cover.
+        wvn, truncSpect: Input axis and intensities.
+        binwidth: Width of each bin, in wavenumbers.
+        return_info: When True, also return a dict describing what happened.
+
+    Returns:
+        (binSpect, newWvn), or (binSpect, newWvn, info) when return_info is True.
+        `info` carries `n_filled` (interior bins interpolated), `n_edge_dropped`,
+        `n_bins`, and `starved` (True when any bin had to be filled, i.e. the
+        bin width is finer than the data supports).
+    """
     # For integer bin widths, shift grid so midpoints land on whole wavenumbers
     # e.g. binwidth=1, start=2900.4 → grid [2899.5,2900.5,...] → midpoints [2900,2901,...]
     if binwidth == int(binwidth):
@@ -127,9 +151,28 @@ def Binning(start, stop, wvn, truncSpect, binwidth=3.5):
             binSpect[k] = np.mean(truncSpect[currBinI]).astype(np.float64)
         else:
             binSpect[k] = np.nan
-    # Remove bins with no data (can occur at edges when grid is shifted)
-    valid = ~np.isnan(binSpect)
-    return binSpect[valid], newWvn[valid]
+
+    empty = np.isnan(binSpect)
+    filled = edge_dropped = 0
+
+    if empty.all():
+        info = dict(n_bins=0, n_filled=0, n_edge_dropped=int(empty.sum()), starved=True)
+        out = (np.array([], dtype=np.float64), np.array([], dtype=np.float64))
+        return out + (info,) if return_info else out
+
+    # Trim empty bins outside the data's coverage, then interpolate what is left.
+    good = np.flatnonzero(~empty)
+    lo, hi = good[0], good[-1] + 1
+    edge_dropped = int(empty[:lo].sum() + empty[hi:].sum())
+    binSpect, newWvn, empty = binSpect[lo:hi], newWvn[lo:hi], empty[lo:hi]
+
+    if empty.any():
+        filled = int(empty.sum())
+        binSpect[empty] = np.interp(newWvn[empty], newWvn[~empty], binSpect[~empty])
+
+    info = dict(n_bins=len(newWvn), n_filled=filled, n_edge_dropped=edge_dropped,
+                starved=filled > 0)
+    return (binSpect, newWvn, info) if return_info else (binSpect, newWvn)
 
 def Denoise(binSpect, SGorder=2, SGframe=7):
     spect = savgol_filter(binSpect.astype(np.float64), SGframe, SGorder)
