@@ -69,7 +69,9 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
     # 1) Baseline, response correction, cosmic ray removal
     spect = data if skip_baseline else subtractBaseline(data)
     if not skip_wl_correction and wl_corr is not None:
-        spect = SpectralResponseCorrection(wl_corr, spect)
+        # Pass the wavenumber axis so a two-column [wavenumber, factor] file is
+        # interpolated onto the spectrum instead of aligned by row index.
+        spect = SpectralResponseCorrection(wl_corr, spect, wvn=wvn)
     spect = CosmicRayRemoval(spect)
 
     # 2) Truncate

@@ -130,6 +130,20 @@ Output: `dist/TRaP/TRaP.exe`
 
 ## Changelog
 
+### v1.0.6 — 2026-09-17
+
+**Bug Fixes**
+- **Spectral response correction read the wrong column**: `SpectralResponseCorrection()` multiplied the spectrum by column 0 of the correction file — the *wavenumber* column — instead of column 1, the correction factor, and aligned it by row index rather than by wavenumber. With a two-column Renishaw `WLCor_*.txt` (descending, 1015 points at 1.085 cm⁻¹) against an ascending spectrum (962 points at 1.214 cm⁻¹), this applied a wavenumber ramp to the data: low bands lifted, high bands crushed.
+  - New signature `SpectralResponseCorrection(wlCorr, rawSpect, wvn=None)`. A two-column `[wavenumber, factor]` input is now interpolated onto the spectrum's wavenumber axis with `np.interp`, mirroring `interp1` in the reference MATLAB implementation. A single column of factors is still applied element-wise.
+  - The `[199:, 0]` normalization constant is removed. It divided by the wavenumber column, and on any correction array shorter than 200 rows `np.mean` over the empty slice returned NaN and silently poisoned the entire spectrum. Factors are now applied as provided. This changes the absolute scale of the saved `_NoNorm` column for single-column SRCF factors; normalized output is unaffected.
+  - A factor whose length does not match the spectrum now raises `ValueError` instead of mis-scaling silently.
+- **Batch preview did not match the batch run**: for Renishaw data the preview skipped spectral response correction and did not skip the dark baseline, so what the preview showed was not what the worker wrote to disk. Preview now mirrors the worker exactly.
+
+**Validation**
+- Cross-checked against the lab's reference MATLAB script (`Poly(5)`, `sg(2,11)`, `WLCor_626`) on seven blood spectra. Pearson r against the reference improves from 0.809–0.859 to 0.9988–0.9994, worst-case nRMSE 1.28%.
+
+---
+
 ### v1.0.5 — 2026-07-13
 
 **New Features**

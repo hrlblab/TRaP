@@ -8,12 +8,53 @@ def subtractBaseline(rawSpect):
     return rawSpect - np.min(rawSpect)
 
 
-def SpectralResponseCorrection(wlCorr, rawSpect):
+def SpectralResponseCorrection(wlCorr, rawSpect, wvn=None):
+    """Apply the spectral response (white-light) correction factor to a spectrum.
+
+    Accepts either layout of correction data:
+
+    - **Two columns** ``[wavenumber, factor]`` (e.g. a Renishaw ``WLCor_*.txt``).
+      The factor is interpolated onto ``wvn`` by wavenumber, so the correction
+      file does not have to share the spectrum's grid or sort order. This
+      mirrors the reference MATLAB implementation's ``interp1(WL(:,1), WL(:,2), nx)``.
+    - **One column** of factors already sampled on the spectrum's own grid
+      (e.g. the output of the SRCF wizard step), applied element-wise.
+
+    Args:
+        wlCorr: Correction data as a DataFrame or array, in either layout above.
+        rawSpect: Spectrum intensities.
+        wvn: Wavenumber axis of ``rawSpect``. Required to use the two-column
+            layout; without it a two-column input falls back to its last column,
+            which is only valid when that column is already grid-aligned.
+
+    Returns:
+        The corrected spectrum, same shape as ``rawSpect``.
+    """
     if isinstance(wlCorr, pd.DataFrame):
-        wlCorr = wlCorr.values.astype(np.float64)
-    wlCorr = wlCorr / np.mean(wlCorr[199:, 0]).astype(np.float64)
-    wlggCorrSpec = rawSpect.astype(np.float64) * wlCorr[:, 0]
-    return wlggCorrSpec
+        wlCorr = wlCorr.values
+    wlCorr = np.asarray(wlCorr, dtype=np.float64)
+    spect = np.asarray(rawSpect, dtype=np.float64)
+
+    if wlCorr.ndim == 2 and wlCorr.shape[1] >= 2 and wvn is not None:
+        # [wavenumber, factor] -> align by wavenumber, never by row index.
+        ref_wvn = wlCorr[:, 0]
+        ref_fac = wlCorr[:, 1]
+        order = np.argsort(ref_wvn)
+        factor = np.interp(np.asarray(wvn, dtype=np.float64).flatten(),
+                           ref_wvn[order], ref_fac[order])
+    else:
+        factor = wlCorr[:, -1] if wlCorr.ndim == 2 else wlCorr.ravel()
+
+    factor = factor.reshape(-1)
+    if factor.shape[0] != spect.reshape(-1).shape[0]:
+        raise ValueError(
+            f"Correction factor length ({factor.shape[0]}) does not match the "
+            f"spectrum ({spect.reshape(-1).shape[0]}). For a two-column "
+            f"[wavenumber, factor] file, pass the spectrum's wavenumber axis "
+            f"so the factor can be interpolated onto it."
+        )
+
+    return spect * factor.reshape(spect.shape)
 
 
 def CosmicRayRemoval(wlggCorrSpec):  # Update Later

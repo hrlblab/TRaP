@@ -961,8 +961,12 @@ class BatchPMeanUI(QMainWindow):
                 else:
                     raw_spec = arr.ravel()
                     file_wvn = np.arange(len(raw_spec), dtype=np.float64)
+                # Match the batch worker exactly: apply WL correction when one is
+                # loaded, and skip the dark baseline for Renishaw/microscope.
                 new_wvn, processed_spec = p_mean_process(
-                    raw_spec, None, file_wvn, cfg, skip_wl_correction=True
+                    raw_spec, self.cached_wl_corr, file_wvn, cfg,
+                    skip_wl_correction=(self.cached_wl_corr is None),
+                    skip_baseline=True
                 )
                 wvn_for_plot = file_wvn
             else:

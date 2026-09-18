@@ -1139,7 +1139,9 @@ class P_Mean_Process_UI(QMainWindow):
                     self.operations.append("SubtractBaseline")
 
             elif step == "SpectralResponseCorrection":
-                self.current_spect = SpectralResponseCorrection(self.wlCorr, self.current_spect)
+                self.current_spect = SpectralResponseCorrection(
+                    self.wlCorr, self.current_spect, wvn=self.wvnFull
+                )
                 self.operations.append("SpectralResponseCorrection")
 
             elif step == "CosmicRayRemoval":

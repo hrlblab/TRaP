@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-17 — v1.0.6
+- **修复光谱响应校正取错列**：`SpectralResponseCorrection` 之前读的是校正文件的第 0 列（波数），而不是第 1 列（校正因子），并且按行索引对齐而非按波数插值。对于 Renishaw 的两列 `WLCor_*.txt`（降序、1015 点 @1.085 cm⁻¹）配上升序光谱（962 点 @1.214 cm⁻¹），结果是把光谱乘上了一条波数斜坡 —— 低波数抬高、高波数压低
+  - 新签名 `SpectralResponseCorrection(wlCorr, rawSpect, wvn=None)`：两列 `[波数, 因子]` 输入按波数 `np.interp` 插值到光谱轴上（对应 MATLAB 的 `interp1`）；单列因子仍按元素相乘
+  - 移除 `[199:, 0]` 归一化常数：它除的是波数列，且校正数组短于 200 行时 `np.mean` 空切片返回 NaN，会污染整条谱。因子现按原样应用，与参考 MATLAB 实现一致
+  - 长度不匹配改为抛 `ValueError`，不再静默错算
+- **Batch 预览与实际运行对齐**：Renishaw 的 batch 预览此前跳过了 SRC 且未跳过暗基线，与 worker 行为不一致，预览结果和落盘结果对不上。现已一致
+- **验证**：对 Megan 提供的 7 条血样光谱，与实验室参考 MATLAB 脚本（`Poly(5)`, `sg(2,11)`, `WLCor_626`）对比，Pearson r 从 0.809–0.859 提升至 0.9988–0.9994，最差 nRMSE 1.28%
+
 ## 2026-03-23
 - **Renishaw 支持**：Renishaw 系统仍需 Spectral Response Correction（SRC），仅自动跳过 X 轴标定步骤
 - **暗背景减除跳过**：Renishaw/显微镜系统跳过最小值暗基线减除（Step 1）
