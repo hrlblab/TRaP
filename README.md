@@ -130,6 +130,19 @@ Output: `dist/TRaP/TRaP.exe`
 
 ## Changelog
 
+### v1.0.8 — 2026-09-18
+
+**Bug Fixes**
+- **Calibration failed on NumPy 2** with `setting an array element with a sequence`. Not data-dependent — every calibration failed. `lsqpolyfit` returns its coefficients as an `(order+1, 1)` column vector, so `accuratepeak2` was indexing out a length-1 array rather than a scalar and assigning it into a scalar slot. NumPy deprecated that in 1.25 and raises from 2.0, with exactly the reported message. `accuratePeak.py` now flattens the coefficients before use; `lsqpolyfit`'s return shape is unchanged because `lsqpolyval` depends on it being two-dimensional.
+- **Peaks picked near either end of a spectrum raised `IndexError`** — the fit window ran past the array because positions are 1-based while storage is 0-based. The window is now clamped to the spectrum.
+- **A near-flat fit window sent the parabola's vertex far outside the samples it was fitted to** — one peak at pixel 10 was "refined" to 26.86, which then corrupts the whole wavenumber axis through the polynomial fit. A vertex landing outside its window, or a non-finite one, now falls back to the original integer pick. This failed silently before.
+- Passing a NumPy scalar as the peak-window width took the array branch and failed on a 0-d array.
+
+**Changes**
+- **Ne-Ar reference labels now give a wavelength span**: `Ne-Ar (785 nm)` → `Ne-Ar (785-940 nm)`, and `Ne-Ar (830 nm)` → `Ne-Ar (830-1010 nm)`. 785 nm is the excitation wavelength; the Ne-Ar emission lines recorded on that system land further out, so the old label read as though the reference spectrum sat at the laser line. Updated in both the reference selector and the reference spectrum's plot title.
+
+---
+
 ### v1.0.7 — 2026-09-18
 
 **New Features**
