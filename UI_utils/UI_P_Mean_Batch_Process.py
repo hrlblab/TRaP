@@ -32,7 +32,8 @@ from matplotlib.figure import Figure
 from utils.io import wdata, rdata
 from utils.ProcessingPipeline import p_mean_process, BinWidthTooFine
 from utils.CosmicRay import VALID_COSMIC_METHODS as _VALID_COSMIC
-from utils.Resample import VALID_BIN_METHODS as _VALID_BIN, grid_report
+from utils.Resample import (VALID_BIN_METHODS as _VALID_BIN, grid_report,
+                            smallest_safe_binwidth)
 from UI_utils.UI_Config_Manager_v2 import ConfigManager
 from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
 from UI_utils.UI_theme import guard_wheel, fit_to_screen, make_scrollable
@@ -64,6 +65,7 @@ def default_config() -> dict:
         "DenoiseMethod": "Savitzky-Golay",
         "BinWidth": 3.5,
         "BinMethod": "Average",
+        "AllowSparseBins": False,
         "SGorder": 2,
         "SGframe": 7,
         "MAWindow": 5,
@@ -139,6 +141,10 @@ def validate_config(cfg: dict) -> list:
     bm = cfg.get("BinMethod", "Average")
     if bm not in VALID_BIN_METHODS:
         errors.append(f"BinMethod {bm!r} not recognised. Valid: {VALID_BIN_METHODS}")
+
+    if not isinstance(cfg.get("AllowSparseBins", False), bool):
+        errors.append(f"AllowSparseBins must be true or false "
+                      f"(got {cfg.get('AllowSparseBins')!r})")
 
     cr = cfg.get("CosmicRayMethod", "None")
     if cr not in VALID_COSMIC_METHODS:
@@ -560,6 +566,17 @@ class BatchPMeanUI(QMainWindow):
         self.combo_binmethod.currentIndexChanged.connect(self._update_bin_readout)
         params_form.addRow("Bin Method:", self.combo_binmethod)
 
+        self.chk_allow_sparse = QCheckBox("Allow bins with no sample (fill by interpolation)")
+        self.chk_allow_sparse.setChecked(bool(self.config.get("AllowSparseBins", False)))
+        self.chk_allow_sparse.setToolTip(
+            "Off by default. A bin that catches no sample can only be filled by "
+            "inventing a value, so processing stops instead. Tick this to proceed "
+            "anyway and have the gaps interpolated."
+        )
+        self.chk_allow_sparse.stateChanged.connect(self._mark_config_modified)
+        self.chk_allow_sparse.stateChanged.connect(self._update_bin_readout)
+        params_form.addRow("", self.chk_allow_sparse)
+
         self.lbl_bin_readout = QLabel("Load data to see what this width does.")
         self.lbl_bin_readout.setWordWrap(True)
         self.lbl_bin_readout.setStyleSheet(
@@ -944,11 +961,19 @@ class BatchPMeanUI(QMainWindow):
             return
 
         rep = grid_report(axis, bw, method=self.combo_binmethod.currentText())
-        colour = {"ok": _C().TEXT_TERTIARY, "caution": _C().TEXT_SECONDARY,
-                  "warning": _C().WARNING}.get(rep.get("level", "ok"), _C().TEXT_TERTIARY)
+        text, colour = rep["summary"], _C().TEXT_TERTIARY
         if not rep.get("ok"):
             colour = _C().WARNING
-        self.lbl_bin_readout.setText(rep["summary"])
+        elif rep["sparse"]:
+            safe = smallest_safe_binwidth(axis)
+            colour = _C().WARNING if self.chk_allow_sparse.isChecked() else _C().DANGER
+            verdict = ("gaps will be interpolated" if self.chk_allow_sparse.isChecked()
+                       else "BLOCKED — tick the box above to proceed anyway")
+            text = (f"{rep['summary']} Smallest width with every bin filled: "
+                    f"{safe:g} cm-1. {verdict}.")
+        elif rep["level"] == "caution":
+            colour = _C().TEXT_SECONDARY
+        self.lbl_bin_readout.setText(text)
         self.lbl_bin_readout.setStyleSheet(f"color: {colour}; font-size: 11px;")
 
     def _loaded_axis(self):
@@ -998,6 +1023,7 @@ class BatchPMeanUI(QMainWindow):
             "Stop": float(self.edit_stop.text()),
             "BinWidth": float(self.edit_binw.text()),
             "BinMethod": self.combo_binmethod.currentText(),
+            "AllowSparseBins": self.chk_allow_sparse.isChecked(),
             "Polyorder": int(self.edit_poly.text()),
             "FBSMaxIter": int(self.edit_fbs_maxiter.text()),
             "FBSExclude": self.edit_fbs_exclude.text().strip(),
@@ -1046,6 +1072,7 @@ class BatchPMeanUI(QMainWindow):
         self.edit_stop.setText(str(cfg.get("Stop", 1700)))
         self.edit_binw.setText(str(cfg.get("BinWidth", 3.5)))
         self.combo_binmethod.setCurrentText(cfg.get("BinMethod", "Average"))
+        self.chk_allow_sparse.setChecked(bool(cfg.get("AllowSparseBins", False)))
         self.edit_poly.setText(str(cfg.get("Polyorder", 7)))
         self.edit_fbs_maxiter.setText(str(cfg.get("FBSMaxIter", 50)))
         self.edit_fbs_exclude.setText(str(cfg.get("FBSExclude", "")))

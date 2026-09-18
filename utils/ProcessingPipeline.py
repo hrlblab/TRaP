@@ -21,20 +21,30 @@ import warnings
 import numpy as np
 from scipy.signal import medfilt
 
-
-class BinWidthTooFine(UserWarning):
-    """Raised as a warning when BinWidth is finer than the detector's sampling.
-
-    Bins that catch no sample are interpolated from their neighbours to keep the
-    output axis uniform, so the result is usable — but those points are not
-    measured, and the caller should know.
-    """
-
 from utils.SpectralPreprocess import (
     Binning, Denoise, Truncate, CosmicRayRemoval,
     SpectralResponseCorrection, subtractBaseline,
     FluorescenceBackgroundSubtraction, Normalize
 )
+
+
+class BinWidthTooFine(UserWarning):
+    """Warns that BinWidth is narrower than the widest gaps in the axis.
+
+    Bin contents are then uneven across the window, but every bin still holds at
+    least one sample, so the result is measured throughout.
+    """
+
+
+class SparseBinError(ValueError):
+    """Raised when a bin width leaves at least one bin with no sample in it.
+
+    The wavenumber axis is non-linear: a grating samples uniformly in
+    wavelength, so one end of the window can sit at one sample per bin while the
+    other is spotty. Any bin that catches nothing can only be filled by
+    inventing a value, so this is refused by default. Set ``AllowSparseBins`` to
+    proceed anyway; the interpolated points are then recorded as such.
+    """
 
 
 def parse_exclude_mask(wvn: np.ndarray, exclude_text: str):
@@ -136,18 +146,29 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
     binned_spect, new_wvn, bin_info = Binning(wvn_trunc[0], wvn_trunc[-1], wvn_trunc,
                                               spect_trunc, binwidth=binwidth,
                                               method=bin_method, return_info=True)
+    if bin_info.get("sparse") and not config.get("AllowSparseBins", False):
+        raise SparseBinError(
+            f"BinWidth {binwidth:g} cm-1 leaves {bin_info['n_empty']} of "
+            f"{bin_info['n_bins']} bins with no sample in them (minimum "
+            f"{bin_info['samples_per_bin_observed_min']} samples/bin). The axis "
+            f"steps by up to {bin_info['native_max']:.3f} cm-1, so a narrower bin "
+            f"falls between samples at the sparse end of the window. Raise "
+            f"BinWidth above that, or set AllowSparseBins to fill the gaps by "
+            f"interpolation."
+        )
     if bin_info["supersampled"] and len(wvn_trunc) > 1:
         # The requested bin width is finer than the detector samples somewhere in
         # the window, so some points are interpolated rather than measured.
-        detail = (f"{bin_info['n_filled']} of {bin_info['n_bins']} bins caught no "
-                  f"sample and were interpolated"
-                  if bin_info["n_filled"] else
-                  f"points between samples are interpolated by '{bin_method}'")
+        detail = (f"{bin_info['n_empty']} of {bin_info['n_bins']} bins were empty "
+                  f"and filled by interpolation"
+                  if bin_info.get("n_empty") else
+                  f"the emptiest bin holds "
+                  f"{bin_info['samples_per_bin_observed_min']} sample(s)")
         warnings.warn(
-            f"BinWidth {binwidth:g} cm-1 is finer than the data supports: {detail}. "
-            f"The axis spacing reaches {bin_info['native_max']:.3f} cm-1 (median "
-            f"{bin_info['native_median']:.3f}). Set BinWidth at or above the "
-            f"maximum spacing to bin only measured points.",
+            f"BinWidth {binwidth:g} cm-1 is narrower than the widest gaps in the "
+            f"axis, which step by up to {bin_info['native_max']:.3f} cm-1 (median "
+            f"{bin_info['native_median']:.3f}): {detail}. Bin contents are uneven "
+            f"across the window.",
             BinWidthTooFine, stacklevel=2
         )
 

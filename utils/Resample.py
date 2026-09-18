@@ -161,14 +161,26 @@ def resample(wvn, spect, start=None, stop=None, binwidth=3.5, method="Average",
     if not return_info:
         return vals, centres
 
+    # Count what actually landed in each bin, so callers can act on the emptiest
+    # one rather than on a ratio against a summary of the spacing.
+    lo = np.searchsorted(x, edges[:-1], side="left")[keep]
+    hi = np.searchsorted(x, edges[1:], side="left")[keep]
+    bin_counts = hi - lo
+    counts_min = int(bin_counts.min()) if bin_counts.size else 0
+    n_empty = int((bin_counts == 0).sum())
+
     step = np.diff(x)
     info = dict(
         method=method, n_bins=len(centres), n_filled=n_filled,
-        n_dropped_edges=int((~keep).sum()),
-        samples_per_bin=float(binwidth / np.median(step)),
+        n_dropped_edges=int((~keep).sum()), n_empty=n_empty,
+        samples_per_bin=counts_min,
+        samples_per_bin_observed_min=counts_min,
+        samples_per_bin_worst_ratio=float(binwidth / step.max()),
+        samples_per_bin_median=float(binwidth / np.median(step)),
         native_min=float(step.min()), native_median=float(np.median(step)),
         native_max=float(step.max()),
         supersampled=bool(binwidth < step.max()),
+        sparse=bool(counts_min < 1),
     )
     return vals, centres, info
 
@@ -252,37 +264,65 @@ def grid_report(wvn, binwidth, method="Average", start=None, stop=None):
     spb_min = binwidth / step.max()
     spb_median = binwidth / np.median(step)
 
-    n_filled = 0
-    counts_min = None
-    if method == "Average":
-        lo = np.searchsorted(x, edges[:-1], side="left")[keep]
-        hi = np.searchsorted(x, edges[1:], side="left")[keep]
-        counts = hi - lo
-        n_filled = int((counts == 0).sum())
-        counts_min = int(counts.min()) if counts.size else None
+    # The figure that decides whether a width is usable is the number of samples
+    # actually counted in the emptiest bin — not a ratio against a summary of the
+    # spacing. On a non-linear axis one end can sit at one sample per bin while
+    # the other is spotty, and only a count sees that. Counts are integers, so
+    # "fewer than one sample per bin" and "at least one empty bin" are the same
+    # condition.
+    lo = np.searchsorted(x, edges[:-1], side="left")[keep]
+    hi = np.searchsorted(x, edges[1:], side="left")[keep]
+    counts = hi - lo
+    n_empty = int((counts == 0).sum())
+    counts_min = int(counts.min()) if counts.size else 0
+    n_filled = n_empty if method == "Average" else 0
 
     supersampled = binwidth < step.max()
+    sparse = counts_min < 1
     out = dict(ok=True, n_bins=int(keep.sum()),
-               samples_per_bin=float(spb_min),          # worst case
-               samples_per_bin_min=float(spb_min),
-               samples_per_bin_median=float(spb_median),
+               samples_per_bin=counts_min,              # what callers should act on
                samples_per_bin_observed_min=counts_min,
+               samples_per_bin_worst_ratio=float(spb_min),
+               samples_per_bin_median=float(spb_median),
                native_min=float(step.min()), native_median=float(np.median(step)),
                native_max=float(step.max()), noise_factor=nf,
-               n_filled=n_filled, supersampled=supersampled,
-               level="warning" if (supersampled and method == "Average") else
-                     ("caution" if supersampled else "ok"))
+               n_empty=n_empty, n_filled=n_filled,
+               supersampled=supersampled, sparse=sparse,
+               level="blocked" if sparse else ("caution" if supersampled else "ok"))
 
-    head = (f"{out['n_bins']} bins · {spb_min:.2f} samples/bin at worst "
-            f"(median {spb_median:.2f}) · noise x{nf:.2f}")
+    head = (f"{out['n_bins']} bins · min {counts_min} sample(s)/bin · "
+            f"noise x{nf:.2f}")
     axis = (f"axis spacing {out['native_min']:.3f}-{out['native_max']:.3f} "
             f"(median {out['native_median']:.3f}) cm-1")
-    if method == "Average" and n_filled:
-        out["summary"] = (f"{head} — {n_filled} of {out['n_bins']} bins catch no "
-                          f"sample and will be interpolated. {axis}")
+    if sparse:
+        out["summary"] = (f"{head} — {n_empty} of {out['n_bins']} bins contain no "
+                          f"sample at all. Raise BinWidth above "
+                          f"{out['native_max']:.3f} cm-1. {axis}")
     elif supersampled:
-        out["summary"] = (f"{head} — finer than the widest gaps in the axis, so "
-                          f"some points are interpolated rather than measured. {axis}")
+        out["summary"] = (f"{head} — narrower than the widest gaps in the axis, so "
+                          f"bin contents are uneven across it. {axis}")
     else:
         out["summary"] = f"{head}. {axis}"
     return out
+
+
+def smallest_safe_binwidth(wvn, start=None, stop=None, hi=None):
+    """Narrowest bin width at which every bin still contains a sample.
+
+    Searched rather than derived: the largest step is a lower bound, but whether
+    a bin starves also depends on where the grid's edges fall against the
+    samples, so the true threshold can sit slightly either side of it.
+    """
+    x = np.sort(np.asarray(wvn, dtype=np.float64).ravel())
+    if x.size < 2:
+        return None
+    step = np.diff(x)
+    lo_w, hi_w = step.min(), float(hi if hi is not None else step.max() * 2)
+    for _ in range(40):
+        mid = (lo_w + hi_w) / 2
+        r = grid_report(x, mid, method="Average", start=start, stop=stop)
+        if r.get("ok") and not r["sparse"]:
+            hi_w = mid
+        else:
+            lo_w = mid
+    return round(hi_w, 3)

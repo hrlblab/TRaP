@@ -41,7 +41,8 @@ from utils.SpectralPreprocess import (
     FluorescenceBackgroundSubtraction, Normalize
 )
 from utils.ProcessingPipeline import run_pipeline
-from utils.Resample import VALID_BIN_METHODS as _VALID_BIN, grid_report
+from utils.Resample import (VALID_BIN_METHODS as _VALID_BIN, grid_report,
+                            smallest_safe_binwidth)
 
 config_manager = ConfigManager()
 
@@ -566,6 +567,16 @@ class P_Mean_Process_UI(QMainWindow):
             "the bin is wide, interpolates when it is narrow, with no special case."
         )
         add_row(params_outer, "Method:", self.combo_binmethod)
+        self.chk_allow_sparse = QCheckBox("Allow bins with no sample")
+        self.chk_allow_sparse.setToolTip(
+            "Off by default. A bin that catches no sample can only be filled by "
+            "inventing a value, so processing stops instead. Tick this to proceed "
+            "anyway and have the gaps interpolated."
+        )
+        self.chk_allow_sparse.stateChanged.connect(self._update_bin_readout)
+        self.chk_allow_sparse.stateChanged.connect(self._schedule_preview)
+        params_outer.addWidget(self.chk_allow_sparse)
+
         self.lbl_bin_readout = QLabel("Load a spectrum to see what this width does.")
         self.lbl_bin_readout.setWordWrap(True)
         self.lbl_bin_readout.setStyleSheet(f"color: {_C().TEXT_TERTIARY}; font-size: 11px;")
@@ -872,9 +883,17 @@ class P_Mean_Process_UI(QMainWindow):
         if not rep.get("ok"):
             show(rep["summary"], _C().WARNING)
             return
-        colour = {"ok": _C().TEXT_TERTIARY, "caution": _C().TEXT_SECONDARY,
-                  "warning": _C().WARNING}.get(rep["level"], _C().TEXT_TERTIARY)
-        show(rep["summary"], colour)
+        if rep["sparse"]:
+            safe = smallest_safe_binwidth(axis)
+            allowed = self.chk_allow_sparse.isChecked()
+            verdict = ("gaps will be interpolated" if allowed
+                       else "BLOCKED — tick the box above to proceed anyway")
+            show(f"{rep['summary']} Smallest width with every bin filled: "
+                 f"{safe:g} cm-1. {verdict}.",
+                 _C().WARNING if allowed else _C().DANGER)
+            return
+        show(rep["summary"],
+             _C().TEXT_SECONDARY if rep["level"] == "caution" else _C().TEXT_TERTIARY)
 
     def _update_denoise_visibility(self):
         """Show/hide denoise parameters based on selected method."""
@@ -968,6 +987,7 @@ class P_Mean_Process_UI(QMainWindow):
             "DenoiseMethod": self.combo_denoise.currentText(),
             "BinWidth": float(self.edit_binwidth.text()),
             "BinMethod": self.combo_binmethod.currentText(),
+            "AllowSparseBins": self.chk_allow_sparse.isChecked(),
             "SGorder": int(self.edit_sgorder.text()),
             "SGframe": int(self.edit_sgframe.text()),
             "MAWindow": int(self.edit_mawindow.text()),
