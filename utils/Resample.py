@@ -241,33 +241,48 @@ def grid_report(wvn, binwidth, method="Average", start=None, stop=None):
                     summary=f"BinWidth {binwidth:g} leaves no complete bin in range.")
 
     step = np.diff(x)
-    spb = binwidth / np.median(step)
     nf = _noise_factor(x, edges, keep, method)
 
+    # Samples per bin is reported at its WORST, not on average. The axis is
+    # non-uniform, so whether any bin starves is decided where the samples are
+    # sparsest — that is, against the largest spacing. Quoting the median would
+    # call a width safe while bins at the sparse end of the axis still catch
+    # nothing, and would contradict the advice to set the width above the
+    # maximum step.
+    spb_min = binwidth / step.max()
+    spb_median = binwidth / np.median(step)
+
     n_filled = 0
+    counts_min = None
     if method == "Average":
         lo = np.searchsorted(x, edges[:-1], side="left")[keep]
         hi = np.searchsorted(x, edges[1:], side="left")[keep]
-        n_filled = int((hi - lo == 0).sum())
+        counts = hi - lo
+        n_filled = int((counts == 0).sum())
+        counts_min = int(counts.min()) if counts.size else None
 
     supersampled = binwidth < step.max()
-    out = dict(ok=True, n_bins=int(keep.sum()), samples_per_bin=float(spb),
+    out = dict(ok=True, n_bins=int(keep.sum()),
+               samples_per_bin=float(spb_min),          # worst case
+               samples_per_bin_min=float(spb_min),
+               samples_per_bin_median=float(spb_median),
+               samples_per_bin_observed_min=counts_min,
                native_min=float(step.min()), native_median=float(np.median(step)),
                native_max=float(step.max()), noise_factor=nf,
                n_filled=n_filled, supersampled=supersampled,
                level="warning" if (supersampled and method == "Average") else
                      ("caution" if supersampled else "ok"))
 
-    head = (f"{out['n_bins']} bins · {spb:.2f} samples/bin · "
-            f"noise x{nf:.2f}")
+    head = (f"{out['n_bins']} bins · {spb_min:.2f} samples/bin at worst "
+            f"(median {spb_median:.2f}) · noise x{nf:.2f}")
     axis = (f"axis spacing {out['native_min']:.3f}-{out['native_max']:.3f} "
             f"(median {out['native_median']:.3f}) cm-1")
     if method == "Average" and n_filled:
         out["summary"] = (f"{head} — {n_filled} of {out['n_bins']} bins catch no "
                           f"sample and will be interpolated. {axis}")
     elif supersampled:
-        out["summary"] = (f"{head} — finer than parts of the axis, so some points "
-                          f"are interpolated rather than measured. {axis}")
+        out["summary"] = (f"{head} — finer than the widest gaps in the axis, so "
+                          f"some points are interpolated rather than measured. {axis}")
     else:
         out["summary"] = f"{head}. {axis}"
     return out

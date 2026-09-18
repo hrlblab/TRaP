@@ -25,3 +25,12 @@ p_mean_config.json
 
 # Batch files
 *.bat
+
+# Research data (large binaries: .wdf, .fig)
+Paper/
+
+# Generated reports
+deliverables/
+
+# Reference papers (third-party copyright)
+*.pdf
