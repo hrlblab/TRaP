@@ -57,9 +57,35 @@ def SpectralResponseCorrection(wlCorr, rawSpect, wvn=None):
     return spect * factor.reshape(spect.shape)
 
 
-def CosmicRayRemoval(wlggCorrSpec):  # Update Later
-    sprSpect = wlggCorrSpec.astype(np.float64)
-    return sprSpect
+def CosmicRayRemoval(wlggCorrSpec, method="None", msn_spect=None, params=None,
+                     return_mask=False):
+    """Remove cosmic ray spikes from a spectrum.
+
+    Defaults to a pass-through so existing callers keep their current behaviour;
+    pass ``method`` to enable detection. See :mod:`utils.CosmicRay` for the
+    algorithms and their parameters.
+
+    Args:
+        wlggCorrSpec: Spectrum intensities.
+        method: "None", "Whitaker-Hayes", or "Li-Dai".
+        msn_spect: Neighbouring acquisition of the same sample, required by
+            "Li-Dai". Without it that method falls back to Whitaker-Hayes.
+        params: Algorithm parameters; unknown keys are ignored.
+        return_mask: When True, also return the boolean mask of replaced
+            samples and the method actually applied.
+
+    Returns:
+        The cleaned spectrum, or ``(cleaned, replaced_mask, method_used)`` when
+        ``return_mask`` is True.
+    """
+    from utils.CosmicRay import despike
+
+    cleaned, mask, used = despike(wlggCorrSpec, method=method,
+                                  msn_spect=msn_spect, params=params)
+    cleaned = cleaned.astype(np.float64)
+    if return_mask:
+        return cleaned, mask, used
+    return cleaned
 
 
 def Truncate(start, stop, wvnFull, sprSpect):

@@ -30,6 +30,7 @@ from matplotlib.figure import Figure
 
 from utils.io import wdata, rdata
 from utils.ProcessingPipeline import p_mean_process
+from utils.CosmicRay import VALID_COSMIC_METHODS as _VALID_COSMIC
 from UI_utils.UI_Config_Manager_v2 import ConfigManager
 from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
 def _C(): return get_current_colors()
@@ -37,6 +38,7 @@ def _C(): return get_current_colors()
 
 VALID_DENOISE   = {"Savitzky-Golay", "Moving Average", "Median Filter", "None"}
 VALID_NORMALIZE = {"Mean", "Max", "Area"}
+VALID_COSMIC_METHODS = set(_VALID_COSMIC)
 
 # Default truncation range for each Raman Shift Range mode.
 # "Custom" is intentionally absent — don't overwrite user's values.
@@ -63,7 +65,23 @@ def default_config() -> dict:
         "MedianKernel": 5,
         "Truncate2Enabled": False,
         "Start2": 900,
-        "Stop2": 1700
+        "Stop2": 1700,
+        # Cosmic ray removal. "None" keeps the historical pass-through.
+        "CosmicRayMethod": "None",
+        # Whitaker-Hayes (single spectrum)
+        "CRZThresh": 15.0,
+        "CRMaxWidth": 3,
+        "CRFillWindow": 5,
+        # Li-Dai (vs. neighbouring acquisition) - Applied Spectroscopy 65(11) Table III
+        "CRPartitionRatio": 0.33,
+        "CRIntensityThresh": 5.0,
+        "CRCorrWindow": 3,
+        "CRCorrThresh": 0.6,
+        "CRResizeThresh": 4.0,
+        "CRNeighborPixels": 3,
+        # Treat consecutive selected files as repeat acquisitions of one sample,
+        # so each can serve as the previous one's MSN spectrum for Li-Dai.
+        "CRReplicateGroup": False,
     }
 
 
@@ -112,6 +130,30 @@ def validate_config(cfg: dict) -> list:
     nm = cfg.get("NormalizeMethod", "Mean")
     if nm not in VALID_NORMALIZE:
         errors.append(f"NormalizeMethod {nm!r} not recognised. Valid: {VALID_NORMALIZE}")
+
+    cr = cfg.get("CosmicRayMethod", "None")
+    if cr not in VALID_COSMIC_METHODS:
+        errors.append(f"CosmicRayMethod {cr!r} not recognised. Valid: {VALID_COSMIC_METHODS}")
+    if cr != "None":
+        check_positive_float("CRZThresh")
+        check_positive_int("CRMaxWidth")
+        check_positive_int("CRFillWindow")
+        check_positive_float("CRIntensityThresh")
+        check_positive_int("CRCorrWindow")
+        check_positive_float("CRResizeThresh")
+        check_positive_int("CRNeighborPixels")
+        try:
+            rp = float(cfg.get("CRPartitionRatio", 0.33))
+            if not 0 < rp < 1:
+                errors.append(f"CRPartitionRatio must be between 0 and 1 (got {rp})")
+        except (TypeError, ValueError):
+            errors.append(f"CRPartitionRatio must be a number (got {cfg.get('CRPartitionRatio')!r})")
+        try:
+            rt = float(cfg.get("CRCorrThresh", 0.6))
+            if not -1 <= rt <= 1:
+                errors.append(f"CRCorrThresh must be between -1 and 1 (got {rt})")
+        except (TypeError, ValueError):
+            errors.append(f"CRCorrThresh must be a number (got {cfg.get('CRCorrThresh')!r})")
 
     sg_frame = cfg.get("SGframe", 7)
     sg_order = cfg.get("SGorder", 2)
@@ -182,6 +224,17 @@ class BatchWorker(QThread):
     def cancel(self):
         self._is_cancelled = True
 
+    @staticmethod
+    def _msn_for(prev_raw, raw_spec, replicate_group):
+        """Previous acquisition, when it can serve as an MSN spectrum.
+
+        Only valid if the user marked the selection as repeats of one sample and
+        the two spectra share a length — Li-Dai compares them point by point.
+        """
+        if not replicate_group or prev_raw is None:
+            return None
+        return prev_raw if len(prev_raw) == len(raw_spec) else None
+
     def run(self):
         processed_files = []
         fail_count = 0
@@ -200,7 +253,20 @@ class BatchWorker(QThread):
             ops_kv += [f"MAW{self.config['MAWindow']}"]
         elif self.config["DenoiseMethod"] == "Median Filter":
             ops_kv += [f"MDK{self.config['MedianKernel']}"]
+        if self.config.get("CosmicRayMethod", "None") != "None":
+            ops_kv += [f"CR{self.config['CosmicRayMethod'].replace('-', '')}"]
         ops_summary = "BatchPMean_" + "_".join(ops_kv)
+
+        # Li-Dai compares each spectrum against a neighbouring acquisition of
+        # the same sample. When the user has marked the selection as repeats of
+        # one sample, the previously processed file serves as that neighbour.
+        replicate_group = bool(self.config.get("CRReplicateGroup", False))
+        use_li_dai = self.config.get("CosmicRayMethod", "None") == "Li-Dai"
+        if use_li_dai and not replicate_group:
+            self.log.emit(
+                "Li-Dai selected but the files are not marked as repeats of one "
+                "sample — falling back to Whitaker-Hayes per spectrum.", "warning")
+        prev_raw = None
 
         total = len(self.data_files)
         for i, path in enumerate(self.data_files):
@@ -233,11 +299,13 @@ class BatchWorker(QThread):
                     else:
                         raw_spec = arr.ravel()
                         file_wvn = self.wvn  # fallback to provided wvn
+                    msn = self._msn_for(prev_raw, raw_spec, replicate_group)
                     # Skip dark baseline for Renishaw/microscope; apply WL correction if provided
-                    new_wvn, processed_spec, prenorm_spec = p_mean_process(
+                    new_wvn, processed_spec, prenorm_spec, cr_mask, cr_used = p_mean_process(
                         raw_spec, self.wl_corr, file_wvn, self.config,
                         skip_wl_correction=(self.wl_corr is None),
-                        skip_baseline=True, return_prenorm=True
+                        skip_baseline=True, return_prenorm=True,
+                        msn_data=msn, return_cosmic=True
                     )
                 else:
                     # Non-Renishaw: single column intensity data
@@ -248,10 +316,22 @@ class BatchWorker(QThread):
                             raw_spec = arr.mean(axis=1)
                     else:
                         raw_spec = arr.ravel()
-                    new_wvn, processed_spec, prenorm_spec = p_mean_process(
+                    msn = self._msn_for(prev_raw, raw_spec, replicate_group)
+                    new_wvn, processed_spec, prenorm_spec, cr_mask, cr_used = p_mean_process(
                         raw_spec, self.wl_corr, self.wvn, self.config,
-                        skip_wl_correction=False, return_prenorm=True
+                        skip_wl_correction=False, return_prenorm=True,
+                        msn_data=msn, return_cosmic=True
                     )
+                prev_raw = raw_spec
+                if cr_used != "None":
+                    n = int(cr_mask.sum())
+                    where = (", ".join(f"{v:.0f}" for v in np.asarray(file_wvn
+                             if self.is_renishaw else self.wvn).ravel()[cr_mask][:8])
+                             if n else "")
+                    self.log.emit(
+                        f"  {cr_used}: {n} point(s) replaced"
+                        + (f" near {where} cm-1" + (" ..." if n > 8 else "") if n else ""),
+                        "info" if n else "info")
                 output_data = np.column_stack((new_wvn, processed_spec, prenorm_spec))
 
                 prefix = os.path.basename(path)
@@ -390,6 +470,7 @@ class BatchPMeanUI(QMainWindow):
 
         self._build_ui()
         self._update_denoise_visibility()
+        self._update_cosmic_visibility()
 
     def _build_ui(self):
         central = QWidget()
@@ -450,6 +531,66 @@ class BatchPMeanUI(QMainWindow):
         params_form.addRow("FBS Exclude Regions:", self.edit_fbs_exclude)
 
         params_form.addRow("Normalize Method:", self.combo_norm)
+
+        # Cosmic ray removal settings
+        self.combo_cosmic = QComboBox()
+        self.combo_cosmic.addItems(["None", "Whitaker-Hayes", "Li-Dai"])
+        self.combo_cosmic.setCurrentText(self.config.get("CosmicRayMethod", "None"))
+        self.combo_cosmic.setMinimumHeight(32)
+        self.combo_cosmic.setToolTip(
+            "Whitaker-Hayes works on a single spectrum and keys on spike narrowness.\n"
+            "Li-Dai compares against a neighbouring acquisition of the same sample and\n"
+            "stays valid when spikes are as wide as real bands — it needs the files below\n"
+            "to be repeats of one sample."
+        )
+        self.combo_cosmic.currentIndexChanged.connect(self._update_cosmic_visibility)
+        self.combo_cosmic.currentIndexChanged.connect(self._mark_config_modified)
+        params_form.addRow("Cosmic Ray Removal:", self.combo_cosmic)
+
+        self.edit_cr_z = QLineEdit(str(self.config.get("CRZThresh", 15.0)))
+        self.edit_cr_width = QLineEdit(str(self.config.get("CRMaxWidth", 3)))
+        self.edit_cr_fill = QLineEdit(str(self.config.get("CRFillWindow", 5)))
+        self.edit_cr_rp = QLineEdit(str(self.config.get("CRPartitionRatio", 0.33)))
+        self.edit_cr_t = QLineEdit(str(self.config.get("CRIntensityThresh", 5.0)))
+        self.edit_cr_w = QLineEdit(str(self.config.get("CRCorrWindow", 3)))
+        self.edit_cr_rt = QLineEdit(str(self.config.get("CRCorrThresh", 0.6)))
+        self.edit_cr_tr = QLineEdit(str(self.config.get("CRResizeThresh", 4.0)))
+        self.edit_cr_nr = QLineEdit(str(self.config.get("CRNeighborPixels", 3)))
+        self.chk_cr_replicate = QCheckBox("Selected files are repeats of one sample")
+        self.chk_cr_replicate.setChecked(bool(self.config.get("CRReplicateGroup", False)))
+        self.chk_cr_replicate.setToolTip(
+            "Required by Li-Dai: each file uses the previous one as its reference\n"
+            "spectrum. Leave unchecked if the files are different samples."
+        )
+
+        self.lbl_cr_z = QLabel("WH Z Threshold:")
+        self.lbl_cr_width = QLabel("WH Max Spike Width (px):")
+        self.lbl_cr_fill = QLabel("WH Fill Window (px):")
+        self.lbl_cr_rp = QLabel("LD Partition Ratio (rp):")
+        self.lbl_cr_t = QLabel("LD Intensity Threshold (t):")
+        self.lbl_cr_w = QLabel("LD Corr. Window (w):")
+        self.lbl_cr_rt = QLabel("LD Corr. Threshold (Rt):")
+        self.lbl_cr_tr = QLabel("LD Resize Threshold (tr):")
+        self.lbl_cr_nr = QLabel("LD Neighbor Pixels (nr):")
+        self.lbl_cr_replicate = QLabel("Replicate Group:")
+
+        self._cr_wh = [(self.lbl_cr_z, self.edit_cr_z),
+                       (self.lbl_cr_width, self.edit_cr_width),
+                       (self.lbl_cr_fill, self.edit_cr_fill)]
+        self._cr_ld = [(self.lbl_cr_replicate, self.chk_cr_replicate),
+                       (self.lbl_cr_rp, self.edit_cr_rp),
+                       (self.lbl_cr_t, self.edit_cr_t),
+                       (self.lbl_cr_w, self.edit_cr_w),
+                       (self.lbl_cr_rt, self.edit_cr_rt),
+                       (self.lbl_cr_tr, self.edit_cr_tr),
+                       (self.lbl_cr_nr, self.edit_cr_nr)]
+        for lbl, widget in self._cr_wh + self._cr_ld:
+            if isinstance(widget, QLineEdit):
+                widget.setMinimumHeight(32)
+                widget.textChanged.connect(self._mark_config_modified)
+            else:
+                widget.stateChanged.connect(self._mark_config_modified)
+            params_form.addRow(lbl, widget)
 
         # Noise smoothing settings
         self.combo_denoise = QComboBox()
@@ -723,6 +864,17 @@ class BatchPMeanUI(QMainWindow):
         self.lbl_medk.setVisible(is_md)
         self.edit_medk.setVisible(is_md)
 
+    def _update_cosmic_visibility(self):
+        method = self.combo_cosmic.currentText()
+        # Li-Dai falls back to Whitaker-Hayes when no neighbour is available, so
+        # its parameters stay relevant in that mode too.
+        for lbl, widget in self._cr_wh:
+            lbl.setVisible(method != "None")
+            widget.setVisible(method != "None")
+        for lbl, widget in self._cr_ld:
+            lbl.setVisible(method == "Li-Dai")
+            widget.setVisible(method == "Li-Dai")
+
     def _update_truncate2_visibility(self):
         enabled = self.chk_truncate2.isChecked()
         self.lbl_start2.setVisible(enabled)
@@ -749,7 +901,23 @@ class BatchPMeanUI(QMainWindow):
             "Truncate2Enabled": t2_enabled,
             "Start2": float(self.edit_start2.text()),
             "Stop2": float(self.edit_stop2.text()),
+            "CosmicRayMethod": self.combo_cosmic.currentText(),
+            "CRZThresh": float(self.edit_cr_z.text()),
+            "CRMaxWidth": int(self.edit_cr_width.text()),
+            "CRFillWindow": int(self.edit_cr_fill.text()),
+            "CRPartitionRatio": float(self.edit_cr_rp.text()),
+            "CRIntensityThresh": float(self.edit_cr_t.text()),
+            "CRCorrWindow": int(self.edit_cr_w.text()),
+            "CRCorrThresh": float(self.edit_cr_rt.text()),
+            "CRResizeThresh": float(self.edit_cr_tr.text()),
+            "CRNeighborPixels": int(self.edit_cr_nr.text()),
+            "CRReplicateGroup": self.chk_cr_replicate.isChecked(),
         }
+
+        if cfg["CosmicRayMethod"] != "None":
+            cr_errors = [e for e in validate_config(cfg) if e.startswith("CR")]
+            if cr_errors:
+                raise ValueError("; ".join(cr_errors))
 
         if cfg["Stop"] <= cfg["Start"]:
             raise ValueError("Stop must be > Start")
@@ -780,7 +948,19 @@ class BatchPMeanUI(QMainWindow):
         self.chk_truncate2.setChecked(bool(cfg.get("Truncate2Enabled", False)))
         self.edit_start2.setText(str(cfg.get("Start2", 900)))
         self.edit_stop2.setText(str(cfg.get("Stop2", 1700)))
+        self.combo_cosmic.setCurrentText(cfg.get("CosmicRayMethod", "None"))
+        self.edit_cr_z.setText(str(cfg.get("CRZThresh", 15.0)))
+        self.edit_cr_width.setText(str(cfg.get("CRMaxWidth", 3)))
+        self.edit_cr_fill.setText(str(cfg.get("CRFillWindow", 5)))
+        self.edit_cr_rp.setText(str(cfg.get("CRPartitionRatio", 0.33)))
+        self.edit_cr_t.setText(str(cfg.get("CRIntensityThresh", 5.0)))
+        self.edit_cr_w.setText(str(cfg.get("CRCorrWindow", 3)))
+        self.edit_cr_rt.setText(str(cfg.get("CRCorrThresh", 0.6)))
+        self.edit_cr_tr.setText(str(cfg.get("CRResizeThresh", 4.0)))
+        self.edit_cr_nr.setText(str(cfg.get("CRNeighborPixels", 3)))
+        self.chk_cr_replicate.setChecked(bool(cfg.get("CRReplicateGroup", False)))
         self._update_denoise_visibility()
+        self._update_cosmic_visibility()
         self._update_truncate2_visibility()
         self.config_modified = False
 

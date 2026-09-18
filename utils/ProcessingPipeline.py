@@ -42,9 +42,31 @@ def parse_exclude_mask(wvn: np.ndarray, exclude_text: str):
     return mask if mask.any() else None
 
 
+def cosmic_params(config: dict) -> dict:
+    """Pull the cosmic-ray parameters out of a config, using paper defaults.
+
+    Whitaker-Hayes keys come first, then Li-Dai's (named as in the paper, with
+    its Table III values).
+    """
+    return {
+        "z_thresh":    float(config.get("CRZThresh", 15.0)),
+        "max_width":   int(config.get("CRMaxWidth", 3)),
+        "fill_window": int(config.get("CRFillWindow", 5)),
+        "rp":          float(config.get("CRPartitionRatio", 0.33)),
+        "t":           float(config.get("CRIntensityThresh", 5.0)),
+        "w":           int(config.get("CRCorrWindow", 3)),
+        "Rt":          float(config.get("CRCorrThresh", 0.6)),
+        "tr":          float(config.get("CRResizeThresh", 4.0)),
+        "nr":          int(config.get("CRNeighborPixels", 3)),
+        "polyorder":   int(config.get("Polyorder", 7)),
+        "fbs_maxiter": int(config.get("FBSMaxIter", 50)),
+    }
+
+
 def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config: dict,
                  skip_wl_correction: bool = False, skip_baseline: bool = False,
-                 return_prenorm: bool = False):
+                 return_prenorm: bool = False, msn_data: np.ndarray = None,
+                 return_cosmic: bool = False):
     """Run the full P-Mean preprocessing pipeline on raw data.
 
     This is a *pure* function: it does not mutate its inputs, so it is safe to
@@ -59,12 +81,17 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
         skip_baseline: If True, skip dark baseline subtraction (Renishaw/microscope)
         return_prenorm: If True, also return the pre-normalization spectrum (the
             fully processed result of every step *except* normalization).
+        msn_data: Raw data of a neighbouring acquisition of the same sample,
+            used by the "Li-Dai" cosmic ray method. It is put through the same
+            baseline and response correction as `data` so the two are compared
+            on equal footing. Without it Li-Dai falls back to Whitaker-Hayes.
+        return_cosmic: If True, also return (replaced_mask, method_used) from
+            the cosmic ray step.
 
     Returns:
-        (new_wvn, finalSpect) by default, or
-        (new_wvn, finalSpect, prenormSpect) when return_prenorm=True — where
-        finalSpect is normalized and prenormSpect is the same spectrum before
-        the normalization step.
+        (new_wvn, finalSpect) by default. `return_prenorm` appends the
+        pre-normalization spectrum, and `return_cosmic` appends the cosmic-ray
+        mask and the method actually applied — in that order.
     """
     # 1) Baseline, response correction, cosmic ray removal
     spect = data if skip_baseline else subtractBaseline(data)
@@ -72,7 +99,18 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
         # Pass the wavenumber axis so a two-column [wavenumber, factor] file is
         # interpolated onto the spectrum instead of aligned by row index.
         spect = SpectralResponseCorrection(wl_corr, spect, wvn=wvn)
-    spect = CosmicRayRemoval(spect)
+
+    # Cosmic ray removal runs here, before truncation and binning: once binned,
+    # a spike is averaged across its bin and can no longer be identified.
+    msn = None
+    if msn_data is not None:
+        msn = msn_data if skip_baseline else subtractBaseline(msn_data)
+        if not skip_wl_correction and wl_corr is not None:
+            msn = SpectralResponseCorrection(wl_corr, msn, wvn=wvn)
+    spect, cosmic_mask, cosmic_used = CosmicRayRemoval(
+        spect, method=str(config.get("CosmicRayMethod", "None")),
+        msn_spect=msn, params=cosmic_params(config), return_mask=True
+    )
 
     # 2) Truncate
     start = float(config.get("Start", 900))
@@ -124,9 +162,12 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
     norm_method = str(config.get("NormalizeMethod", "Mean")).lower()
     finalSpect = Normalize(prenorm_spect, method=norm_method)
 
+    out = [new_wvn, finalSpect]
     if return_prenorm:
-        return new_wvn, finalSpect, prenorm_spect
-    return new_wvn, finalSpect
+        out.append(prenorm_spect)
+    if return_cosmic:
+        out += [cosmic_mask, cosmic_used]
+    return tuple(out) if len(out) > 2 else (new_wvn, finalSpect)
 
 
 # Backwards-compatible alias (batch UI historically used this name).

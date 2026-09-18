@@ -52,7 +52,7 @@ Step 4: Spectrum Batch Processing     /
 |-------|-----------|-------------|
 | 1 | Baseline Subtraction | Remove minimum intensity offset |
 | 2 | Spectral Response Correction | Apply correction factor from Step 2 |
-| 3 | Cosmic Ray Removal | Reserved placeholder for future integration |
+| 3 | Cosmic Ray Removal | Whitaker–Hayes (single spectrum) or Li–Dai (vs. a replicate); off by default |
 | 4 | Truncation | Extract wavenumber range of interest |
 | 5 | Binning | Rebin to uniform wavenumber spacing |
 | 6 | Noise Smoothing | Savitzky-Golay / Moving Average / Median filter |
@@ -129,6 +129,25 @@ python build_exe.py nuitka       # Nuitka (alternative)
 Output: `dist/TRaP/TRaP.exe`
 
 ## Changelog
+
+### Unreleased — 2026-09-18
+
+**New Features**
+- **Cosmic ray removal** (`utils/CosmicRay.py`): pipeline Step 3 is no longer a pass-through. Two complementary algorithms, chosen by whether a neighbouring acquisition exists.
+  - **Whitaker–Hayes (2018)** — single spectrum. Modified Z-score of the first difference; differencing removes baseline and fluorescence, leaving spikes as extreme outliers against a robust MAD scale. Its discriminator is narrowness, so it needs real Raman bands to be comfortably wider than a strike.
+  - **Li–Dai (2011)** — two spectra. Compares against a Most Similar Neighbouring spectrum through a linear approximation `x = a*xm + b`, which absorbs intensity and fluorescence drift. Detection does not rely on spike width, so it stays valid on low-resolution instruments where a strike is as wide as a genuine band. Spikes on strong peaks are separated from real peak variation by a moving-window correlation test.
+  - Batch UI gains a **Replicate Group** option: consecutive files serve as each other's reference spectrum. Li–Dai falls back to Whitaker–Hayes when no neighbour is available.
+  - Defaults to `None`, preserving existing behaviour. All parameters are exposed in the batch UI and persisted to config.
+  - The number and position of replaced points go to the processing log; output filenames carry a `CR<method>` tag.
+
+**Deviations from the Li–Dai paper** (both documented in the code)
+- A detection zone inside a strong-peak area narrower than `narrow_zone` (default 3 px) is taken as a spike without the correlation test. Correlation reads shape and is scale-invariant, so a spike on a peak apex leaves a 3-point window's shape intact and slips through. The paper's zones run tens of pixels wide because strong peaks drift between consecutive online acquisitions; against a replicate they collapse to the spike itself.
+- The correlation analysis region is padded symmetrically; the paper does not specify how to widen a narrow zone.
+
+**Validation**
+- Synthetic spikes injected into Megan's seven replicate spectra at flat, weak-signal, and strong-peak-apex positions. Li–Dai removed 11 of 12; Whitaker–Hayes removed 6 of 12. Both produced zero false positives on clean spectra and zero distortion away from the spike. The Whitaker–Hayes `z_thresh` default of 15.0 is the lowest value that never fires on a clean spectrum across all seven.
+
+---
 
 ### v1.0.6 — 2026-09-17
 
