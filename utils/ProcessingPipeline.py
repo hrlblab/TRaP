@@ -132,21 +132,21 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
     wvn_trunc = wvn_trunc.flatten()
     spect_trunc = spect_trunc.flatten()
     binwidth = float(config.get("BinWidth", 3.5))
+    bin_method = str(config.get("BinMethod", "Average"))
     binned_spect, new_wvn, bin_info = Binning(wvn_trunc[0], wvn_trunc[-1], wvn_trunc,
                                               spect_trunc, binwidth=binwidth,
-                                              return_info=True)
-    if bin_info["starved"] and len(wvn_trunc) > 1:
-        # The requested bin width is finer than the detector samples, so some
-        # bins carry interpolated values rather than measured ones. Say so.
-        step = np.diff(wvn_trunc)
-        bin_info["max_native_step"] = float(step.max())
-        bin_info["median_native_step"] = float(np.median(step))
+                                              method=bin_method, return_info=True)
+    if bin_info["supersampled"] and len(wvn_trunc) > 1:
+        # The requested bin width is finer than the detector samples somewhere in
+        # the window, so some points are interpolated rather than measured.
+        detail = (f"{bin_info['n_filled']} of {bin_info['n_bins']} bins caught no "
+                  f"sample and were interpolated"
+                  if bin_info["n_filled"] else
+                  f"points between samples are interpolated by '{bin_method}'")
         warnings.warn(
-            f"BinWidth {binwidth:g} cm-1 is finer than the data supports: "
-            f"{bin_info['n_filled']} of {bin_info['n_bins']} bins caught no sample "
-            f"and were interpolated. The axis spacing reaches "
-            f"{bin_info['max_native_step']:.3f} cm-1 (median "
-            f"{bin_info['median_native_step']:.3f}). Set BinWidth at or above the "
+            f"BinWidth {binwidth:g} cm-1 is finer than the data supports: {detail}. "
+            f"The axis spacing reaches {bin_info['native_max']:.3f} cm-1 (median "
+            f"{bin_info['native_median']:.3f}). Set BinWidth at or above the "
             f"maximum spacing to bin only measured points.",
             BinWidthTooFine, stacklevel=2
         )

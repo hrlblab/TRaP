@@ -54,7 +54,7 @@ Step 4: Spectrum Batch Processing     /
 | 2 | Spectral Response Correction | Apply correction factor from Step 2 |
 | 3 | Cosmic Ray Removal | Whitaker–Hayes (single spectrum) or Li–Dai (vs. a replicate); off by default |
 | 4 | Truncation | Extract wavenumber range of interest |
-| 5 | Binning | Rebin to uniform wavenumber spacing |
+| 5 | Binning | Rebin to a uniform grid — Average / Interpolate / Integrate |
 | 6 | Noise Smoothing | Savitzky-Golay / Moving Average / Median filter |
 | 7 | Fluorescence Background | Iterative polynomial baseline subtraction |
 | 8 | Normalization | Scale spectrum by mean / max / area |
@@ -131,6 +131,14 @@ Output: `dist/TRaP/TRaP.exe`
 ## Changelog
 
 ### Unreleased — 2026-09-18
+
+**New Features**
+- **Three binning methods** (`utils/Resample.py`), selected by `BinMethod`, default `Average`:
+  - **Average** — mean of the samples in each bin. Gains 1/sqrt(N) in signal-to-noise when a bin spans several samples; a bin narrower than the local sampling catches nothing and is filled from its neighbours.
+  - **Interpolate** — linear interpolation of the original spectrum at each bin centre. Handles any bin width with no special case, but reads only the two samples bracketing the centre, so it never gains signal-to-noise at any width.
+  - **Integrate** — mean value of the piecewise-linear interpolant across each bin. Reduces to a weighted average when a bin spans many samples and to interpolation when it sits between two, continuous across the crossover. Conserves the integral and weights partially-covered samples by their overlap.
+  - All three return the same axis; switching method changes values only. The UI adds no per-method parameters — they share the single `BinWidth` — but does add a live readout showing bin count, samples per bin, the noise factor, and how many points would be interpolated rather than measured. Present in both the single-spectrum and batch UIs.
+  - The reported noise factor is computed from the 2-norm of each output point's weight row, i.e. from the operator actually applied, and agrees with a 40-trial Monte-Carlo measurement to within 0.01.
 
 **Bug Fixes**
 - **Binning returned a non-uniform axis** (reported: "setting the bin width to 1 cm⁻¹, the saved axis is sometimes spaced by 1 cm⁻¹ and sometimes by 2"). `Binning()` dropped any bin that caught no sample. A grating samples uniformly in *wavelength*, so in wavenumber the spacing shrinks as wavenumber rises — 1.215 → 0.982 cm⁻¹ on the evaluation set, median 1.087. A 1.0 cm⁻¹ bin is finer than that across the whole 650–1700 window, so 88 of 1049 bins fell between two samples and were silently deleted, leaving the 1/2 cm⁻¹ alternating axis (654, 660, 666 … absent).

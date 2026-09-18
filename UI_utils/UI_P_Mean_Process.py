@@ -40,6 +40,7 @@ from utils.SpectralPreprocess import (
     FluorescenceBackgroundSubtraction, Normalize
 )
 from utils.ProcessingPipeline import run_pipeline
+from utils.Resample import VALID_BIN_METHODS as _VALID_BIN, grid_report
 
 config_manager = ConfigManager()
 
@@ -549,6 +550,25 @@ class P_Mean_Process_UI(QMainWindow):
         add_step_header(params_outer, "Binning")
         self.edit_binwidth = make_field("3.5")
         add_row(params_outer, "Bin Width (cm⁻¹):", self.edit_binwidth)
+        self.combo_binmethod = QComboBox()
+        self.combo_binmethod.addItems(list(_VALID_BIN))
+        self.combo_binmethod.setMinimumHeight(32)
+        self.combo_binmethod.setToolTip(
+            "Average — mean of the samples in each bin. Gains signal-to-noise when a "
+            "bin spans several samples; bins narrower than the sampling catch nothing "
+            "and are filled from their neighbours.\n\n"
+            "Interpolate — reads the two samples around each bin centre. Works at any "
+            "width but never gains signal-to-noise.\n\n"
+            "Integrate — mean of the interpolated curve across each bin. Averages when "
+            "the bin is wide, interpolates when it is narrow, with no special case."
+        )
+        add_row(params_outer, "Method:", self.combo_binmethod)
+        self.lbl_bin_readout = QLabel("Load a spectrum to see what this width does.")
+        self.lbl_bin_readout.setWordWrap(True)
+        self.lbl_bin_readout.setStyleSheet(f"color: {_C().TEXT_TERTIARY}; font-size: 11px;")
+        params_outer.addWidget(self.lbl_bin_readout)
+        self.edit_binwidth.textChanged.connect(self._update_bin_readout)
+        self.combo_binmethod.currentIndexChanged.connect(self._update_bin_readout)
 
         # Noise Smoothing
         add_step_header(params_outer, "Noise Smoothing")
@@ -817,6 +837,42 @@ class P_Mean_Process_UI(QMainWindow):
                     pass
         return mask if mask.any() else None
 
+    def _update_bin_readout(self):
+        """Say what the chosen bin width does to the loaded wavenumber axis.
+
+        All three bin methods take the same single parameter, so what helps here
+        is not another input but feedback: samples per bin, what it costs in
+        noise, and whether any points end up interpolated rather than measured.
+        """
+        def show(text, colour):
+            self.lbl_bin_readout.setText(text)
+            self.lbl_bin_readout.setStyleSheet(f"color: {colour}; font-size: 11px;")
+
+        axis = np.asarray(getattr(self, "wvnFull", None), dtype=np.float64).ravel()
+        if axis.size < 2 or np.ptp(axis) == 0:
+            show("Load a spectrum to see what this width does.", _C().TEXT_TERTIARY)
+            return
+        try:
+            bw = float(self.edit_binwidth.text())
+        except (TypeError, ValueError):
+            show("Bin Width must be a number.", _C().WARNING)
+            return
+        try:
+            lo, hi = float(self.edit_start.text()), float(self.edit_stop.text())
+            sel = axis[(axis >= lo) & (axis <= hi)]
+            if sel.size >= 2:
+                axis = sel
+        except (TypeError, ValueError):
+            pass
+
+        rep = grid_report(np.sort(axis), bw, method=self.combo_binmethod.currentText())
+        if not rep.get("ok"):
+            show(rep["summary"], _C().WARNING)
+            return
+        colour = {"ok": _C().TEXT_TERTIARY, "caution": _C().TEXT_SECONDARY,
+                  "warning": _C().WARNING}.get(rep["level"], _C().TEXT_TERTIARY)
+        show(rep["summary"], colour)
+
     def _update_denoise_visibility(self):
         """Show/hide denoise parameters based on selected method."""
         method = self.combo_denoise.currentText()
@@ -908,6 +964,7 @@ class P_Mean_Process_UI(QMainWindow):
             "NormalizeMethod": self.combo_norm.currentText(),
             "DenoiseMethod": self.combo_denoise.currentText(),
             "BinWidth": float(self.edit_binwidth.text()),
+            "BinMethod": self.combo_binmethod.currentText(),
             "SGorder": int(self.edit_sgorder.text()),
             "SGframe": int(self.edit_sgframe.text()),
             "MAWindow": int(self.edit_mawindow.text()),
@@ -933,6 +990,7 @@ class P_Mean_Process_UI(QMainWindow):
         for w in line_edits:
             w.editingFinished.connect(self._schedule_preview)
         self.combo_norm.currentIndexChanged.connect(self._schedule_preview)
+        self.combo_binmethod.currentIndexChanged.connect(self._schedule_preview)
         self.combo_denoise.currentIndexChanged.connect(self._schedule_preview)
         self.chk_truncate2.stateChanged.connect(self._schedule_preview)
 
@@ -1166,13 +1224,15 @@ class P_Mean_Process_UI(QMainWindow):
                 if binwidth <= 0:
                     QMessageBox.warning(self, "Error", "BinWidth must be positive!")
                     return
+                bin_method = self.combo_binmethod.currentText()
                 binned_spect, new_wvn = Binning(
                     start, stop, self.current_wvn.flatten(),
-                    self.current_spect.flatten(), binwidth=binwidth
+                    self.current_spect.flatten(), binwidth=binwidth,
+                    method=bin_method
                 )
                 self.current_spect = binned_spect
                 self.current_wvn = new_wvn
-                self.operations.append(f"Binning(binwidth={binwidth})")
+                self.operations.append(f"Binning({bin_method},binwidth={binwidth})")
 
             elif step == "Polyfit Preview":
                 polyorder = int(self.edit_polyorder.text())
@@ -1393,6 +1453,7 @@ class P_Mean_Process_UI(QMainWindow):
                     # Sort ascending by wavenumber (Renishaw exports descending)
                     sort_idx = np.argsort(data_arr[:, 0])
                     self.wvnFull = data_arr[sort_idx, 0].flatten()
+                    self._update_bin_readout()
                     self.current_spect = data_arr[sort_idx, 1].flatten()
                 else:
                     # Single column - use index as x-axis
@@ -1426,6 +1487,7 @@ class P_Mean_Process_UI(QMainWindow):
 
                 # Load wavenumber from calibration file
                 self.wvnFull = rdata.getwvnfrompath(self.calibration_file).flatten().astype(np.float64)
+                self._update_bin_readout()
                 self.current_wvn = self.wvnFull.copy()
 
             # Reset state

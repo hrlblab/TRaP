@@ -110,69 +110,36 @@ def Truncate(start, stop, wvnFull, sprSpect):
 #             binSpect[k] = np.nan
 #     return binSpect, newWvn
 
-def Binning(start, stop, wvn, truncSpect, binwidth=3.5, return_info=False):
+def Binning(start, stop, wvn, truncSpect, binwidth=3.5, method="Average",
+            return_info=False):
     """Rebin a spectrum onto a uniform wavenumber grid.
 
-    A bin narrower than the detector's local sample spacing can fall between two
-    samples and catch nothing. Such interior bins are filled by interpolating
-    their neighbours rather than dropped, because dropping them silently returns
-    a non-uniform axis — a 1.0 cm-1 request coming back with a mix of 1 and
-    2 cm-1 steps — which then misleads every downstream step that works on
-    sample index (Savitzky-Golay among them).
-
-    Empty bins at the very edges are still dropped: there is nothing on one side
-    to interpolate from, so they lie outside the data's actual coverage.
+    Thin wrapper kept for the historical call signature; the methods themselves
+    live in :mod:`utils.Resample`, which documents how they differ. "Average" is
+    the default and matches this function's long-standing behaviour, apart from
+    interior bins that catch no sample now being interpolated instead of dropped
+    (dropping them returned a non-uniform axis).
 
     Args:
         start, stop: Wavenumber range to cover.
         wvn, truncSpect: Input axis and intensities.
         binwidth: Width of each bin, in wavenumbers.
+        method: "Average", "Interpolate", or "Integrate".
         return_info: When True, also return a dict describing what happened.
 
     Returns:
         (binSpect, newWvn), or (binSpect, newWvn, info) when return_info is True.
-        `info` carries `n_filled` (interior bins interpolated), `n_edge_dropped`,
-        `n_bins`, and `starved` (True when any bin had to be filled, i.e. the
-        bin width is finer than the data supports).
     """
-    # For integer bin widths, shift grid so midpoints land on whole wavenumbers
-    # e.g. binwidth=1, start=2900.4 → grid [2899.5,2900.5,...] → midpoints [2900,2901,...]
-    if binwidth == int(binwidth):
-        grid_start = round(start) - binwidth / 2.0
-    else:
-        grid_start = start
-    binWvn = np.arange(grid_start, stop + binwidth, binwidth, dtype=np.float64)
-    newWvn = (binWvn[:-1] + binWvn[1:]) / 2.0
-    binSpect = np.zeros(len(newWvn), dtype=np.float64)
-    for k in range(len(newWvn)):
-        b1, b2 = binWvn[k], binWvn[k + 1]
-        currBinI = (wvn >= b1) & (wvn < b2)
-        if np.any(currBinI):
-            binSpect[k] = np.mean(truncSpect[currBinI]).astype(np.float64)
-        else:
-            binSpect[k] = np.nan
+    from utils.Resample import resample
 
-    empty = np.isnan(binSpect)
-    filled = edge_dropped = 0
-
-    if empty.all():
-        info = dict(n_bins=0, n_filled=0, n_edge_dropped=int(empty.sum()), starved=True)
-        out = (np.array([], dtype=np.float64), np.array([], dtype=np.float64))
-        return out + (info,) if return_info else out
-
-    # Trim empty bins outside the data's coverage, then interpolate what is left.
-    good = np.flatnonzero(~empty)
-    lo, hi = good[0], good[-1] + 1
-    edge_dropped = int(empty[:lo].sum() + empty[hi:].sum())
-    binSpect, newWvn, empty = binSpect[lo:hi], newWvn[lo:hi], empty[lo:hi]
-
-    if empty.any():
-        filled = int(empty.sum())
-        binSpect[empty] = np.interp(newWvn[empty], newWvn[~empty], binSpect[~empty])
-
-    info = dict(n_bins=len(newWvn), n_filled=filled, n_edge_dropped=edge_dropped,
-                starved=filled > 0)
-    return (binSpect, newWvn, info) if return_info else (binSpect, newWvn)
+    out = resample(wvn, truncSpect, start=start, stop=stop, binwidth=binwidth,
+                   method=method, return_info=return_info)
+    if not return_info:
+        return out[0], out[1]
+    vals, centres, info = out
+    # Historical key name, kept so existing callers keep reading the same field.
+    info["starved"] = info["n_filled"] > 0 or info["supersampled"]
+    return vals, centres, info
 
 def Denoise(binSpect, SGorder=2, SGframe=7):
     spect = savgol_filter(binSpect.astype(np.float64), SGframe, SGorder)

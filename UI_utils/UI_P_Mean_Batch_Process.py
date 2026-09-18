@@ -32,6 +32,7 @@ from matplotlib.figure import Figure
 from utils.io import wdata, rdata
 from utils.ProcessingPipeline import p_mean_process, BinWidthTooFine
 from utils.CosmicRay import VALID_COSMIC_METHODS as _VALID_COSMIC
+from utils.Resample import VALID_BIN_METHODS as _VALID_BIN, grid_report
 from UI_utils.UI_Config_Manager_v2 import ConfigManager
 from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
 def _C(): return get_current_colors()
@@ -40,6 +41,7 @@ def _C(): return get_current_colors()
 VALID_DENOISE   = {"Savitzky-Golay", "Moving Average", "Median Filter", "None"}
 VALID_NORMALIZE = {"Mean", "Max", "Area"}
 VALID_COSMIC_METHODS = set(_VALID_COSMIC)
+VALID_BIN_METHODS = set(_VALID_BIN)
 
 # Default truncation range for each Raman Shift Range mode.
 # "Custom" is intentionally absent — don't overwrite user's values.
@@ -60,6 +62,7 @@ def default_config() -> dict:
         "NormalizeMethod": "Mean",
         "DenoiseMethod": "Savitzky-Golay",
         "BinWidth": 3.5,
+        "BinMethod": "Average",
         "SGorder": 2,
         "SGframe": 7,
         "MAWindow": 5,
@@ -131,6 +134,10 @@ def validate_config(cfg: dict) -> list:
     nm = cfg.get("NormalizeMethod", "Mean")
     if nm not in VALID_NORMALIZE:
         errors.append(f"NormalizeMethod {nm!r} not recognised. Valid: {VALID_NORMALIZE}")
+
+    bm = cfg.get("BinMethod", "Average")
+    if bm not in VALID_BIN_METHODS:
+        errors.append(f"BinMethod {bm!r} not recognised. Valid: {VALID_BIN_METHODS}")
 
     cr = cfg.get("CosmicRayMethod", "None")
     if cr not in VALID_COSMIC_METHODS:
@@ -247,6 +254,7 @@ class BatchWorker(QThread):
             f"P{self.config['Polyorder']}",
             f"DN{self.config['DenoiseMethod'].replace(' ', '')}",
             f"BW{self.config['BinWidth']}",
+            f"BM{self.config.get('BinMethod', 'Average')[:3]}",
         ]
         if self.config["DenoiseMethod"] == "Savitzky-Golay":
             ops_kv += [f"SGO{self.config['SGorder']}", f"SGF{self.config['SGframe']}"]
@@ -480,6 +488,7 @@ class BatchPMeanUI(QMainWindow):
         self._build_ui()
         self._update_denoise_visibility()
         self._update_cosmic_visibility()
+        self._update_bin_readout()
 
     def _build_ui(self):
         central = QWidget()
@@ -530,6 +539,30 @@ class BatchPMeanUI(QMainWindow):
         params_form.addRow("Start (cm⁻¹):", self.edit_start)
         params_form.addRow("Stop (cm⁻¹):", self.edit_stop)
         params_form.addRow("BinWidth:", self.edit_binw)
+
+        self.combo_binmethod = QComboBox()
+        self.combo_binmethod.addItems(list(_VALID_BIN))
+        self.combo_binmethod.setCurrentText(self.config.get("BinMethod", "Average"))
+        self.combo_binmethod.setMinimumHeight(32)
+        self.combo_binmethod.setToolTip(
+            "Average — mean of the samples in each bin. Gains signal-to-noise when a "
+            "bin spans several samples; bins narrower than the sampling catch nothing "
+            "and are filled from their neighbours.\n\n"
+            "Interpolate — reads the two samples around each bin centre. Works at any "
+            "width but never gains signal-to-noise.\n\n"
+            "Integrate — mean of the interpolated curve across each bin. Averages when "
+            "the bin is wide, interpolates when it is narrow, with no special case."
+        )
+        self.combo_binmethod.currentIndexChanged.connect(self._mark_config_modified)
+        self.combo_binmethod.currentIndexChanged.connect(self._update_bin_readout)
+        params_form.addRow("Bin Method:", self.combo_binmethod)
+
+        self.lbl_bin_readout = QLabel("Load data to see what this width does.")
+        self.lbl_bin_readout.setWordWrap(True)
+        self.lbl_bin_readout.setStyleSheet(
+            f"color: {_C().TEXT_TERTIARY}; font-size: 11px;")
+        params_form.addRow("", self.lbl_bin_readout)
+        self.edit_binw.textChanged.connect(self._update_bin_readout)
         params_form.addRow("Polyorder:", self.edit_poly)
         params_form.addRow("FBS Max Iterations:", self.edit_fbs_maxiter)
 
@@ -873,6 +906,69 @@ class BatchPMeanUI(QMainWindow):
         self.lbl_medk.setVisible(is_md)
         self.edit_medk.setVisible(is_md)
 
+    def _update_bin_readout(self):
+        """Say what the chosen bin width does to the loaded wavenumber axis.
+
+        The three bin methods take the same single parameter, so what the user
+        needs here is not another input but feedback: how many samples land in a
+        bin, what it costs in noise, and whether any points end up interpolated
+        rather than measured.
+        """
+        axis = self._loaded_axis()
+        if axis is None:
+            self.lbl_bin_readout.setText("Load data to see what this width does.")
+            self.lbl_bin_readout.setStyleSheet(
+                f"color: {_C().TEXT_TERTIARY}; font-size: 11px;")
+            return
+        try:
+            bw = float(self.edit_binw.text())
+        except (TypeError, ValueError):
+            self.lbl_bin_readout.setText("BinWidth must be a number.")
+            self.lbl_bin_readout.setStyleSheet(
+                f"color: {_C().WARNING}; font-size: 11px;")
+            return
+
+        try:
+            start = float(self.edit_start.text())
+            stop = float(self.edit_stop.text())
+            axis = axis[(axis >= start) & (axis <= stop)]
+        except (TypeError, ValueError):
+            pass
+        if axis.size < 2:
+            self.lbl_bin_readout.setText("Truncation range leaves too few points.")
+            self.lbl_bin_readout.setStyleSheet(
+                f"color: {_C().WARNING}; font-size: 11px;")
+            return
+
+        rep = grid_report(axis, bw, method=self.combo_binmethod.currentText())
+        colour = {"ok": _C().TEXT_TERTIARY, "caution": _C().TEXT_SECONDARY,
+                  "warning": _C().WARNING}.get(rep.get("level", "ok"), _C().TEXT_TERTIARY)
+        if not rep.get("ok"):
+            colour = _C().WARNING
+        self.lbl_bin_readout.setText(rep["summary"])
+        self.lbl_bin_readout.setStyleSheet(f"color: {colour}; font-size: 11px;")
+
+    def _loaded_axis(self):
+        """Wavenumber axis of the first selected file, or None."""
+        if not self.data_files:
+            return None
+        try:
+            path = self.data_files[0]
+            if self._is_renishaw_system():
+                df = rdata.read_txt_file(path)
+                if df is None:
+                    return None
+                arr = np.asarray(df.to_numpy() if hasattr(df, "to_numpy") else df,
+                                 dtype=np.float64)
+                if arr.ndim == 2 and arr.shape[1] >= 2:
+                    return np.sort(arr[:, 0].ravel())
+                return None
+            if self.cached_wvn is None and not self._load_support_files():
+                return None
+            return np.sort(np.asarray(self.cached_wvn, dtype=np.float64).ravel())
+        except Exception:
+            return None
+
     def _update_cosmic_visibility(self):
         method = self.combo_cosmic.currentText()
         # Li-Dai falls back to Whitaker-Hayes when no neighbour is available, so
@@ -898,6 +994,7 @@ class BatchPMeanUI(QMainWindow):
             "Start": float(self.edit_start.text()),
             "Stop": float(self.edit_stop.text()),
             "BinWidth": float(self.edit_binw.text()),
+            "BinMethod": self.combo_binmethod.currentText(),
             "Polyorder": int(self.edit_poly.text()),
             "FBSMaxIter": int(self.edit_fbs_maxiter.text()),
             "FBSExclude": self.edit_fbs_exclude.text().strip(),
@@ -945,6 +1042,7 @@ class BatchPMeanUI(QMainWindow):
         self.edit_start.setText(str(cfg.get("Start", 900)))
         self.edit_stop.setText(str(cfg.get("Stop", 1700)))
         self.edit_binw.setText(str(cfg.get("BinWidth", 3.5)))
+        self.combo_binmethod.setCurrentText(cfg.get("BinMethod", "Average"))
         self.edit_poly.setText(str(cfg.get("Polyorder", 7)))
         self.edit_fbs_maxiter.setText(str(cfg.get("FBSMaxIter", 50)))
         self.edit_fbs_exclude.setText(str(cfg.get("FBSExclude", "")))
@@ -971,6 +1069,7 @@ class BatchPMeanUI(QMainWindow):
         self._update_denoise_visibility()
         self._update_cosmic_visibility()
         self._update_truncate2_visibility()
+        self._update_bin_readout()
         self.config_modified = False
 
     def _log(self, message: str, level: str = "info"):
@@ -1075,6 +1174,7 @@ class BatchPMeanUI(QMainWindow):
                 self.list_data.addItem(os.path.basename(f))
             self.lbl_data_count.setText(f"{len(files)} files selected")
             self._log(f"Selected {len(files)} data files", "info")
+            self._update_bin_readout()
 
     def on_select_wlcorr(self):
         file, _ = QFileDialog.getOpenFileName(
