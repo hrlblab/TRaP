@@ -66,9 +66,14 @@ class XcalRefData:
 
 
 # Sheet registry: key -> (excel sheet name, display label, material)
+#
+# The Ne-Ar labels give a wavelength span, not a single figure: 785 nm is the
+# laser, while the Ne-Ar emission lines recorded on that system land further
+# out. Labelling the reference "785 nm" alone reads as though the spectrum
+# sits at the excitation wavelength.
 _SHEETS = {
-    "NeAr785": ("NeAr 785nm System", "Ne-Ar (785 nm)", "neon"),
-    "NeAr830": ("NeAr 830nm System", "Ne-Ar (830 nm)", "neon"),
+    "NeAr785": ("NeAr 785nm System", "Ne-Ar (785-940 nm)", "neon"),
+    "NeAr830": ("NeAr 830nm System", "Ne-Ar (830-1010 nm)", "neon"),
     "AcetFP":  ("Acet FP",           "Acetaminophen (Fingerprint)", "acetaminophen"),
     "AcetHW":  ("Acet HW",           "Acetaminophen (High Wavenumber)", "acetaminophen"),
 }

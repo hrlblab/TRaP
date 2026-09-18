@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Ne-Ar 参考标签改为波长区间**（Richard 建议）：`Ne-Ar (785 nm)` → **`Ne-Ar (785-940 nm)`**，830 系统同理改为 `Ne-Ar (830-1010 nm)`。785 nm 是激发波长，Ne-Ar 谱线本身落在更长的波长上，原标签读起来像是参考谱位于激发波长处。标签同时出现在参考选择下拉框和参考谱图标题
+
 ### 修复标定在 NumPy 2 上必然失败（Richard 反馈）
 
 - **现象**：`Calibration failed: setting an array element with a sequence`
