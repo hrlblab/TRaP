@@ -130,6 +130,22 @@ Output: `dist/TRaP/TRaP.exe`
 
 ## Changelog
 
+### v1.0.9 — 2026-10-23
+
+**Bug Fixes**
+- **Scrolling a form changed the parameter under the cursor.** A QComboBox or QSpinBox accepts wheel events whenever it is enabled, and Qt offers no flag to stop it. `guard_wheel()` swallows the event unless the widget has focus and sets `StrongFocus`, so the wheel can no longer focus a widget and then edit it on the next notch; a widget the user has clicked into still responds normally. 24 widgets across five windows were affected.
+- **The response-correction file the app saved could not be applied to anything else.** `_save_correction_factor` wrote a bare column of factors with no axis. Every reference correction file is two columns and the pipeline interpolates the factor onto the spectrum by wavenumber (v1.0.6), so a one-column file can only be aligned by row index — correct only when the spectrum happens to share the identical axis. It now writes `[wavenumber, factor]` with a header, and refuses to save when no calibration is loaded rather than producing an unusable file.
+- **The SRM 2241 certificate polynomial had a wrong fifth-order coefficient**: `1.515596e-17` should be `1.15596e-17`. The x⁵ term makes the error grow with wavenumber — up to ×1.14 across 264–2008 cm⁻¹ and up to ×5.9 across 2230–3974 cm⁻¹. Verified against a collaborator's own SRM measurement and the correction his pipeline derived from it: a correct curve may differ from his by a constant scale, so the test is whether the ratio is flat, and the published value holds it to 3.4% where the old one spread it over 13.0%.
+- **Correction factors ran away at the detector edges**, reaching −267 and +1516 on real data; a negative factor silently flips the spectrum. Unusable points are now interpolated across, with a warning naming how many.
+- **`nist_correction_from_srm` ignored its `coeffs` argument**, overwriting it with a hardcoded list on the first line of the function body.
+
+**Changes**
+- **The fluorescence baseline is fitted against wavenumber rather than detector index.** A grating samples uniformly in wavelength, so the wavenumber step varies across the window and the two are not affinely related. That stage's residual drops from 0.679% to 0.224% on the seven-spectrum evaluation set. End-to-end figures are unchanged, because the shipped default bins first and binning emits a uniform axis on which the two parameterisations are equivalent; the gain appears with binning off or on a non-uniform axis.
+- **Windows now fit a 1280×720 desktop.** Measured offscreen rather than judged by eye: the configuration manager needed 1266×400 and now needs 737×420; x-axis calibration needed 1051×681 and now needs 889×520. The configuration manager's width came from four buttons in a row — a QHBoxLayout's minimum is the sum of its children's — and the calibration window's height from a page stack that could not scroll.
+- **`nist_correction_from_srm` warns when the excitation does not match the standard.** SRM 2241 is certified for 785 nm only.
+
+---
+
 ### v1.0.8 — 2026-09-18
 
 **Bug Fixes**
