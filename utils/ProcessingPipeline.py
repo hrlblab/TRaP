@@ -155,8 +155,10 @@ def run_pipeline(data: np.ndarray, wl_corr: np.ndarray, wvn: np.ndarray, config:
     polyorder = int(config.get("Polyorder", 7))
     fbs_maxiter = int(config.get("FBSMaxIter", 50))
     exclude_mask = parse_exclude_mask(new_wvn, str(config.get("FBSExclude", "")))
-    _, fbs_spect = FluorescenceBackgroundSubtraction(binned_spect, polyorder, max_iter=fbs_maxiter,
-                                                      exclude_mask=exclude_mask)
+    _, fbs_spect = FluorescenceBackgroundSubtraction(binned_spect, polyorder,
+                                                      max_iter=fbs_maxiter,
+                                                      exclude_mask=exclude_mask,
+                                                      wvn=new_wvn)
 
     # 5) Noise smoothing
     method = str(config.get("DenoiseMethod", "Savitzky-Golay"))

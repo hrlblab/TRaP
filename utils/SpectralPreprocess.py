@@ -145,9 +145,10 @@ def Denoise(binSpect, SGorder=2, SGframe=7):
     spect = savgol_filter(binSpect.astype(np.float64), SGframe, SGorder)
     return spect.astype(np.float64)
 
-def FluorescenceBackgroundSubtraction(spect, polyorder, max_iter=50, exclude_mask=None):
+def FluorescenceBackgroundSubtraction(spect, polyorder, max_iter=50, exclude_mask=None,
+                                      wvn=None):
     base = baselinePolynomialFit(spect.astype(np.float64), polyorder, max_iter=max_iter,
-                                  exclude_mask=exclude_mask)
+                                  exclude_mask=exclude_mask, wvn=wvn)
     finalSpect = spect.astype(np.float64) - base
     return base.astype(np.float64), finalSpect.astype(np.float64)
 
@@ -199,12 +200,40 @@ def manual_polyval(coeffs, x):
     return result
 
 
-def baselinePolynomialFit(y, degree, max_iter=50, exclude_mask=None):
+def baselinePolynomialFit(y, degree, max_iter=50, exclude_mask=None, wvn=None):
+    """Iterative polynomial baseline (ModPoly).
+
+    Args:
+        y: Spectrum intensities.
+        degree: Polynomial order.
+        max_iter: Consecutive iterations with an unchanged clipped-point count
+            before the loop stops.
+        exclude_mask: Points to keep out of the fit (peak regions).
+        wvn: Wavenumber axis to fit against. Fluorescence is a function of
+            wavenumber, not of detector index, and the two are not
+            interchangeable on a grating where the wavenumber step varies
+            across the window: a degree-n polynomial in index is a different
+            family of curves from a degree-n polynomial in wavenumber. Omit it
+            and the fit falls back to sample index, which is what this did
+            before the axis was available here.
+
+    Returns:
+        The fitted baseline, same length as y.
+    """
     data = y.copy().astype(np.float64)
     if exclude_mask is None:
         exclude_mask = np.zeros(len(y), dtype=bool)
     include_mask = ~exclude_mask
-    x_all = np.arange(1, len(data) + 1, dtype=np.float64)
+    if wvn is not None and len(np.ravel(wvn)) == len(data):
+        x_all = np.asarray(wvn, dtype=np.float64).ravel()
+    else:
+        x_all = np.arange(1, len(data) + 1, dtype=np.float64)
+    # Map the axis to [-1, 1] before fitting. A polynomial is unchanged by an
+    # affine reparametrisation of x, but raising wavenumbers near 1700 to the
+    # fifth power spans sixteen orders of magnitude across the design matrix,
+    # and the solver starts from an all-ones guess.
+    if np.ptp(x_all) > 0:
+        x_all = 2 * (x_all - x_all[0]) / (x_all[-1] - x_all[0]) - 1
 
     oldL = np.float64(1_000_000)
     newL = np.float64(999_999)

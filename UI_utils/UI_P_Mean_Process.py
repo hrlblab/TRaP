@@ -1238,7 +1238,9 @@ class P_Mean_Process_UI(QMainWindow):
                 polyorder = int(self.edit_polyorder.text())
                 fbs_maxiter = int(self.edit_fbs_maxiter.text())
                 exclude_mask = self._parse_exclude_mask(self.current_wvn.flatten())
-                base, _ = FluorescenceBackgroundSubtraction(self.current_spect.flatten(), polyorder, max_iter=fbs_maxiter, exclude_mask=exclude_mask)
+                base, _ = FluorescenceBackgroundSubtraction(
+                    self.current_spect.flatten(), polyorder, max_iter=fbs_maxiter,
+                    exclude_mask=exclude_mask, wvn=self.current_wvn)
                 # Show polyfit preview without modifying data
                 wvn = self.current_wvn.flatten() if self.current_wvn is not None else None
                 self.canvas.plot_polyfit(wvn, self.current_spect.flatten(), base)
@@ -1255,7 +1257,7 @@ class P_Mean_Process_UI(QMainWindow):
                 exclude_mask = self._parse_exclude_mask(self.current_wvn.flatten())
                 base, finalSpect = FluorescenceBackgroundSubtraction(
                     self.current_spect.flatten(), polyorder, max_iter=fbs_maxiter,
-                    exclude_mask=exclude_mask
+                    exclude_mask=exclude_mask, wvn=self.current_wvn
                 )
                 self.current_spect = finalSpect
                 self.operations.append(f"FBS(order={polyorder},iter={fbs_maxiter})")
