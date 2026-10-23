@@ -46,6 +46,7 @@ from utils.XcalReference import XcalReference
 from utils.Calibration_v3 import CalibrationProcessorV3
 from UI_utils.UI_Calibration_v2 import load_spectrum_file
 from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Fonts
+from UI_utils.UI_theme import guard_wheel, fit_to_screen, make_scrollable
 
 
 def _C():
@@ -368,7 +369,9 @@ class PairingPanel(QWidget):
         top = QHBoxLayout()
         top.addWidget(QLabel("Reference:"))
         self.combo_ref = QComboBox()
-        self.combo_ref.setMinimumWidth(220)
+        self.combo_ref.setMinimumWidth(160)
+        self.combo_ref.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_ref.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.combo_ref.currentIndexChanged.connect(self._on_ref_changed)
         top.addWidget(self.combo_ref)
         top.addSpacing(12)
@@ -604,11 +607,7 @@ class CalibrationUIV3(QDialog):
         self.setWindowTitle("X-Axis Calibration (v3)")
         self.setWindowFlags(Qt.Window | Qt.WindowMinimizeButtonHint |
                             Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint)
-        self.setMinimumSize(800, 600)
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.resize(min(1300, int(screen.width() * 0.92)),
-                    min(900, int(screen.height() * 0.92)))
-        self.move(screen.center() - self.rect().center())
+        fit_to_screen(self, 1300, 900, min_w=760, min_h=520)
         self.setStyleSheet(get_current_stylesheet())
 
         self.exc_wavelength = exc_wavelength
@@ -620,6 +619,7 @@ class CalibrationUIV3(QDialog):
 
         self._build_ui()
         self._update_step()
+        guard_wheel(self)
 
     def _build_ui(self):
         main = QVBoxLayout(self)
@@ -646,6 +646,7 @@ class CalibrationUIV3(QDialog):
 
         # Stacked pages
         self.stack = QStackedWidget()
+        self.stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         neon_key = XcalReference.for_config("neon", self.exc_wavelength, self.raman_range)
         self.neon_panel = PairingPanel("neon", neon_key)
@@ -661,7 +662,14 @@ class CalibrationUIV3(QDialog):
 
         self.stack.addWidget(self._build_calibrate_page())
 
-        main.addWidget(self.stack, 1)
+        # The pages are taller than a 720 px desktop leaves room for, so they
+        # scroll rather than push the window past the screen.
+        stack_scroll = QScrollArea()
+        stack_scroll.setWidgetResizable(True)
+        stack_scroll.setFrameShape(QFrame.NoFrame)
+        stack_scroll.setWidget(self.stack)
+        make_scrollable(stack_scroll, min_width=320, min_height=200)
+        main.addWidget(stack_scroll, 1)
 
         # Status bar
         self.status_bar = QStatusBar()
@@ -689,8 +697,9 @@ class CalibrationUIV3(QDialog):
     def _build_wavelength_page(self):
         w = QWidget()
         lay = QVBoxLayout(w)
-        lay.addWidget(QLabel(
-            "Do you know the exact laser excitation wavelength?"))
+        _q = QLabel("Do you know the exact laser excitation wavelength?")
+        _q.setWordWrap(True)
+        lay.addWidget(_q)
         known = QGroupBox("Option A: Known Wavelength (Recommended)")
         kl = QHBoxLayout(known)
         kl.addWidget(QLabel("Wavelength (nm):"))
@@ -703,6 +712,8 @@ class CalibrationUIV3(QDialog):
             self.input_wavelength.setValue(785.0)
         kl.addWidget(self.input_wavelength)
         btn_known = QPushButton("Use This Wavelength →")
+        btn_known.setMinimumWidth(150)
+        btn_known.setToolTip("Use This Wavelength")
         btn_known.setProperty("class", "success")
         btn_known.clicked.connect(self._use_known_wavelength)
         kl.addWidget(btn_known)
@@ -711,6 +722,8 @@ class CalibrationUIV3(QDialog):
         unknown = QGroupBox("Option B: Estimate from Acetaminophen (less accurate)")
         ul = QVBoxLayout(unknown)
         btn_acet = QPushButton("Use Acetaminophen Spectrum →")
+        btn_acet.setMinimumWidth(150)
+        btn_acet.setToolTip("Use Acetaminophen Spectrum")
         btn_acet.clicked.connect(self._use_acetaminophen)
         ul.addWidget(btn_acet)
         lay.addWidget(unknown)

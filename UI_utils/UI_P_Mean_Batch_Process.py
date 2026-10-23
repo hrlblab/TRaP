@@ -35,6 +35,7 @@ from utils.CosmicRay import VALID_COSMIC_METHODS as _VALID_COSMIC
 from utils.Resample import VALID_BIN_METHODS as _VALID_BIN, grid_report
 from UI_utils.UI_Config_Manager_v2 import ConfigManager
 from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
+from UI_utils.UI_theme import guard_wheel, fit_to_screen, make_scrollable
 def _C(): return get_current_colors()
 
 
@@ -456,6 +457,7 @@ class BatchPMeanUI(QMainWindow):
         self.setWindowTitle("Batch P_Mean Processing - Enhanced")
         screen = QApplication.primaryScreen().availableGeometry()
         self.resize(min(1200, int(screen.width() * 0.9)), min(800, int(screen.height() * 0.9)))
+        fit_to_screen(self, 1200, 800, min_w=700, min_h=500)
         self.move(screen.center() - self.rect().center())
 
         # Get current system from config
@@ -486,6 +488,7 @@ class BatchPMeanUI(QMainWindow):
         self.cached_wvn = None
 
         self._build_ui()
+        guard_wheel(self)
         self._update_denoise_visibility()
         self._update_cosmic_visibility()
         self._update_bin_readout()

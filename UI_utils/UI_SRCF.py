@@ -43,6 +43,7 @@ from utils.WLCorrection import (
     wl_correction_from_true_and_measured, nist_correction_from_srm
 )
 from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
+from UI_utils.UI_theme import guard_wheel, fit_to_screen, make_scrollable
 def _C(): return get_current_colors()
 
 
@@ -96,6 +97,7 @@ class SRCF_UI(QDialog):
 
         # Build UI
         self._build_ui()
+        guard_wheel(self)
         self._update_mode_ui()
 
     # ============================================================

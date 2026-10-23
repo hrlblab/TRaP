@@ -11,9 +11,9 @@ Features:
 - Elegant shadows and hover effects
 """
 
-from PyQt5.QtWidgets import QApplication, QGraphicsDropShadowEffect
+from PyQt5.QtWidgets import QApplication, QGraphicsDropShadowEffect, QSizePolicy
 from PyQt5.QtGui import QFont, QColor
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QObject, QEvent
 
 
 # =============================================================================
@@ -1039,3 +1039,87 @@ def style_section_title(label):
     label.setProperty("class", "section-title")
     label.style().unpolish(label)
     label.style().polish(label)
+
+
+# ---------------------------------------------------------------------------
+# Scrolling and small screens
+# ---------------------------------------------------------------------------
+
+class _WheelGuard(QObject):
+    """Let the wheel scroll the page instead of changing the value under it.
+
+    A combo box or spin box accepts wheel events whenever it is enabled, so
+    scrolling a form that contains one silently edits a parameter as the cursor
+    passes over it. Qt offers no flag for this; the fix is to swallow the event
+    unless the widget has focus, which leaves deliberate wheel adjustment on a
+    widget the user has clicked into working as before.
+    """
+
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Wheel and not obj.hasFocus():
+            event.ignore()
+            return True
+        return False
+
+
+_WHEEL_GUARD = None
+
+
+def guard_wheel(root):
+    """Stop value widgets under `root` from consuming wheel events.
+
+    Returns the number of widgets guarded. Safe to call more than once: Qt
+    ignores a duplicate installation of the same filter object.
+    """
+    global _WHEEL_GUARD
+    from PyQt5.QtWidgets import QComboBox, QAbstractSpinBox, QAbstractSlider
+
+    if _WHEEL_GUARD is None:
+        _WHEEL_GUARD = _WheelGuard()
+
+    n = 0
+    for cls in (QComboBox, QAbstractSpinBox, QAbstractSlider):
+        for w in root.findChildren(cls):
+            # StrongFocus still takes focus by click and tab, but no longer by
+            # wheel, so a scroll that passes over the widget cannot focus it
+            # and then edit it on the next notch.
+            w.setFocusPolicy(Qt.StrongFocus)
+            w.installEventFilter(_WHEEL_GUARD)
+            n += 1
+    return n
+
+
+def fit_to_screen(window, preferred_w, preferred_h, min_w=640, min_h=480):
+    """Size a window to the desktop it will actually open on.
+
+    Keeps the window inside the available work area (which excludes the task
+    bar) and never lets its declared minimum exceed that area, so a 1280x720
+    or scaled display can still show the whole frame. Content that does not
+    fit is expected to scroll.
+    """
+    screen = QApplication.primaryScreen()
+    avail = screen.availableGeometry() if screen else None
+    if avail is None:
+        window.resize(preferred_w, preferred_h)
+        return
+    max_w, max_h = avail.width() - 16, avail.height() - 16
+    window.setMinimumSize(min(min_w, max_w), min(min_h, max_h))
+    window.resize(min(preferred_w, max_w), min(preferred_h, max_h))
+    window.move(avail.center() - window.rect().center())
+
+
+def make_scrollable(scroll_area, min_width=280, min_height=160):
+    """Let a scroll area shrink below the natural width of its contents.
+
+    With setWidgetResizable(True) a QScrollArea reports its child's minimum
+    size as its own, so a tall form propagates its full width up to the window
+    and the window stops fitting on a small screen. An explicit minimum takes
+    precedence over that hint, and the horizontal bar appears when needed.
+    """
+    from PyQt5.QtWidgets import QScrollArea
+    scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    scroll_area.setMinimumWidth(min_width)
+    scroll_area.setMinimumHeight(min_height)
+    scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+    return scroll_area

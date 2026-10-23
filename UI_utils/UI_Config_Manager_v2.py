@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtGui import QFont
-from UI_utils.UI_theme import get_current_colors
+from UI_utils.UI_theme import get_current_colors, guard_wheel, fit_to_screen, make_scrollable
 def _C(): return get_current_colors()
 
 
@@ -289,14 +289,12 @@ class ConfigManagerUI(QDialog):
         self.labels = {}
 
         self.setWindowTitle("Configuration Manager")
-        self.setMinimumSize(550, 400)
-        screen = QApplication.primaryScreen().availableGeometry()
-        self.resize(min(950, int(screen.width() * 0.9)), min(680, int(screen.height() * 0.9)))
-        self.move(screen.center() - self.rect().center())
+        fit_to_screen(self, 950, 680, min_w=560, min_h=420)
 
         self._apply_style()
         self._build_ui()
         self._load_params_to_ui()
+        guard_wheel(self)
 
     def _apply_style(self):
         """Apply modern styling to the dialog."""
@@ -539,10 +537,13 @@ class ConfigManagerUI(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        # Scroll area for form
+        # Scroll area for form. The form itself is ~585 px wide and ~740 tall;
+        # without an explicit minimum the scroll area hands both figures up to
+        # the dialog and the window stops fitting a 1280x720 screen.
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
+        make_scrollable(scroll, min_width=300, min_height=200)
 
         form_widget = QWidget()
         form_layout = QVBoxLayout(form_widget)
@@ -669,6 +670,14 @@ class ConfigManagerUI(QDialog):
         btn_save.clicked.connect(self._save_and_continue)
         btn_layout.addWidget(btn_save)
 
+        # A QHBoxLayout's minimum width is the sum of its children's, so four
+        # buttons labelled with full phrases were setting the minimum width of
+        # the whole dialog. An explicit minimum lets the style elide the label
+        # on a narrow window instead of forcing the window wider.
+        for _b in (btn_load, btn_save_default, btn_save_as, btn_save):
+            _b.setMinimumWidth(96)
+            _b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            _b.setToolTip(_b.text().replace("&&", "&"))
         layout.addLayout(btn_layout)
 
         return panel

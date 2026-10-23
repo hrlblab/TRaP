@@ -33,6 +33,7 @@ from scipy.signal import medfilt
 
 from UI_utils.UI_Config_Manager_v2 import ConfigManager
 from UI_utils.UI_theme import get_current_stylesheet, get_current_colors, Colors, Fonts
+from UI_utils.UI_theme import guard_wheel, fit_to_screen, make_scrollable
 def _C(): return get_current_colors()
 from utils.SpectralPreprocess import (
     Binning, Denoise, Truncate, CosmicRayRemoval,
@@ -433,6 +434,7 @@ class P_Mean_Process_UI(QMainWindow):
         self.setWindowTitle("Spectrum Data Process - Enhanced")
         screen = QApplication.primaryScreen().availableGeometry()
         self.resize(min(1400, int(screen.width() * 0.9)), min(900, int(screen.height() * 0.9)))
+        fit_to_screen(self, 1400, 900, min_w=720, min_h=520)
         self.move(screen.center() - self.rect().center())
         # Apply unified dark theme
         self.setStyleSheet(get_current_stylesheet())
@@ -469,6 +471,7 @@ class P_Mean_Process_UI(QMainWindow):
         self.current_step_index = 0
 
         self._build_ui()
+        guard_wheel(self)
         self._update_ui_state()
         self._update_file_widgets_visibility()
 
