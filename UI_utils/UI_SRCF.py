@@ -39,6 +39,7 @@ from matplotlib.figure import Figure
 
 # Import core functions from utils module
 from utils.WLCorrection import (
+    correction_table,
     read_vector_file, read_2col_file,
     wl_correction_from_true_and_measured, nist_correction_from_srm
 )
@@ -887,6 +888,15 @@ class SRCF_UI(QDialog):
             return
 
         # Default filename based on mode
+        if self.wvn is None:
+            QMessageBox.warning(
+                self, "No Axis",
+                "The correction factor can only be saved together with the "
+                "wavenumber axis it was derived on. Load the calibration "
+                "(.mat) first."
+            )
+            return
+
         default_names = {
             "WL": "wl_correction_factor.txt",
             "NIST": "nist_correction_factor.txt",
@@ -904,12 +914,23 @@ class SRCF_UI(QDialog):
             return
 
         try:
+            # Two columns, [wavenumber, factor]: this is the shape every
+            # reference correction file uses and the shape the pipeline reads,
+            # which interpolates the factor onto the spectrum by wavenumber
+            # rather than trusting the two to share a row order.
+            table = correction_table(self.wvn, self.corr)
             np.savetxt(
-                fp, self.corr.reshape(-1, 1),
-                delimiter=","
+                fp, table, delimiter=",", fmt="%.8g",
+                header="Wavenumber_cm-1,Correction_Factor", comments=""
             )
-            self.status_bar.showMessage(f"Correction factor saved: {fp}")
-            QMessageBox.information(self, "Saved", f"Correction factor saved to:\n{fp}")
+            self.status_bar.showMessage(
+                f"Correction factor saved ({len(table)} points): {fp}")
+            QMessageBox.information(
+                self, "Saved",
+                f"Correction factor saved to:\n{fp}\n\n"
+                f"{len(table)} points, written as [wavenumber, factor] so the "
+                f"processing steps can align it to any spectrum by wavenumber."
+            )
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save:\n{e}")
 

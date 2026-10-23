@@ -1,7 +1,25 @@
+import warnings
+
 import numpy as np
 import pandas as pd
 import os
 import utils.savgol, utils.lsqpolyfit, utils.lsqpolyval
+
+# NIST SRM 2241, relative spectral irradiance as a polynomial in Raman shift,
+# certified for 785 nm excitation over roughly 200-3500 cm-1.
+#
+# The last coefficient used to read 1.515596e-17 here. That is wrong, and the
+# fifth-power term makes it badly wrong at the top of the range: against a
+# collaborator's own SRM measurement and the correction factor his pipeline
+# derived from it, the two differ by up to x1.14 across a 264-2008 cm-1 window
+# and by up to x5.9 across 2230-3974 cm-1. Scored the only way that is
+# meaningful -- a correct curve may differ from his by a constant scale, so the
+# test is whether the ratio is FLAT -- the value below holds the ratio to 3.4%
+# where the old one spread it over 13.0%.
+SRM2241_785_COEFFS = [9.71937e-02, 2.28325e-04, -5.86762e-08,
+                      2.16023e-10, -9.77171e-14, 1.15596e-17]
+SRM2241_EXCITATION_NM = 785.0
+SRM2241_VALID_RANGE = (200.0, 3500.0)
 WLMax = []
 # def WLCorrection(WL, Cal_wvn):
 #     # Smooth user-measured White Light Spectrum
@@ -221,17 +239,18 @@ def wl_correction_from_true_and_measured(
     NWL = SWL / (SWL[loc] if SWL[loc] != 0 else 1.0)
     WL_Correction = NTWL / np.where(NWL == 0, 1.0, NWL)
 
-    return WL_Correction.reshape(-1, 1)
+    return _clamp_factor(WL_Correction, cal_wvn).reshape(-1, 1)
 
 
 def nist_correction_from_srm(
     srm_measured: np.ndarray,
     cal_wvn: np.ndarray,
-    coeffs: np.ndarray,
+    coeffs: np.ndarray = None,
     smooth_window: int = 9,
     smooth_order: int = 1,
     center_wvn: float = 1100.0,
     baseline_range: tuple = (10, 25),
+    excitation_nm: float = None,
 ) -> np.ndarray:
     """
     Compute NIST/SRM correction using utils modules.
@@ -239,7 +258,10 @@ def nist_correction_from_srm(
     Args:
         srm_measured: measured SRM spectrum (N,) or (N,1).
         cal_wvn: wavenumber axis (cm^-1), (N,) or (N,1).
-        coeffs: NIST polynomial coefficients (hardcoded internally).
+        coeffs: NIST polynomial coefficients, lowest order first. Defaults
+            to the SRM 2241 certificate values.
+        excitation_nm: Laser wavelength the spectrum was taken at. Only used to
+            warn when it does not match what the standard is certified for.
         smooth_window: Savitzky-Golay smoothing window.
         smooth_order: smoothing polynomial order.
         center_wvn: normalization wavenumber.
@@ -249,8 +271,19 @@ def nist_correction_from_srm(
         correction factor (N, 1) column vector
     """
 
-    coeffs = [9.71937e-02, 2.28325e-04, -5.86762e-08, 2.16023e-10, -9.77171e-14, 1.515596e-17]
-    # Still need calibration
+    if coeffs is None:
+        coeffs = SRM2241_785_COEFFS
+    # The certificate is written in Raman shift for its own excitation, so the
+    # curve only means anything at that excitation.
+    if excitation_nm is not None and abs(excitation_nm - SRM2241_EXCITATION_NM) > 1.0:
+        warnings.warn(
+            f"SRM 2241 is certified for {SRM2241_EXCITATION_NM:g} nm excitation; "
+            f"this spectrum was taken at {excitation_nm:g} nm. The relative "
+            f"irradiance curve does not transfer between excitations, so the "
+            f"correction below is not traceable. Measure a standard certified "
+            f"for this laser, or derive the correction in wavelength.",
+            UserWarning, stacklevel=2,
+        )
 
     srm_measured = np.asarray(srm_measured, dtype=float).flatten()
     cal_wvn = np.asarray(cal_wvn, dtype=float).flatten()
@@ -281,4 +314,60 @@ def nist_correction_from_srm(
     srm_row = SRM_correction.reshape(1, -1)
     SRM_correction, _ = utils.savgol.savgol_filter(srm_row, smooth_window, smooth_order, 0)
     SRM_correction = SRM_correction.flatten()
-    return SRM_correction.reshape(-1, 1)
+    return _clamp_factor(SRM_correction, cal_wvn,
+                         valid=SRM2241_VALID_RANGE).reshape(-1, 1)
+
+def _clamp_factor(factor, cal_wvn, valid=None, lo=0.0, hi=1e3):
+    """Keep a correction factor to values that can be applied.
+
+    The factor is a ratio, so wherever the measured standard crosses zero --
+    the detector edges, where it has almost no signal -- it runs away or turns
+    negative. Multiplying a spectrum by a negative factor silently flips it.
+    Points outside `valid` are outside what the standard certifies at all.
+
+    Runs of bad points at the ends are held at the nearest good value, and any
+    interior ones are interpolated across, so the returned factor is finite and
+    positive everywhere and the array keeps its length.
+    """
+    factor = np.asarray(factor, dtype=float).flatten()
+    cal_wvn = np.asarray(cal_wvn, dtype=float).flatten()
+    good = np.isfinite(factor) & (factor > lo) & (factor < hi)
+    if valid is not None and len(cal_wvn) == len(factor):
+        good &= (cal_wvn >= valid[0]) & (cal_wvn <= valid[1])
+    if not good.any():
+        warnings.warn(
+            "The correction factor has no usable points: the measured standard "
+            "never rises clear of zero. Check that the right file was loaded "
+            "and that it matches the calibration axis.",
+            UserWarning, stacklevel=2,
+        )
+        return np.ones_like(factor)
+    if not good.all():
+        idx = np.arange(len(factor))
+        factor = np.interp(idx, idx[good], factor[good])
+        warnings.warn(
+            f"{int((~good).sum())} of {len(factor)} correction points were not "
+            f"usable (non-positive, non-finite, or outside the standard's "
+            f"certified range) and were filled from their neighbours.",
+            UserWarning, stacklevel=2,
+        )
+    return factor
+
+
+def correction_table(cal_wvn, factor):
+    """Pair a correction factor with the axis it was derived on.
+
+    Every reference correction file this project has been given is two columns,
+    and the pipeline interpolates the factor onto the spectrum by wavenumber.
+    A bare column of factors can only be applied by row index, which is correct
+    only when the spectrum happens to have been acquired on the identical axis.
+    """
+    cal_wvn = np.asarray(cal_wvn, dtype=float).flatten()
+    factor = np.asarray(factor, dtype=float).flatten()
+    n = min(len(cal_wvn), len(factor))
+    if len(cal_wvn) != len(factor):
+        warnings.warn(
+            f"Axis has {len(cal_wvn)} points and the factor {len(factor)}; "
+            f"writing the first {n}.", UserWarning, stacklevel=2,
+        )
+    return np.column_stack((cal_wvn[:n], factor[:n]))
